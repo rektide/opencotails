@@ -4,31 +4,38 @@
 
 opencode stores its full session history (messages, reasoning, tool calls, patches) in a single WAL-mode SQLite database with **no FTS index and no built-in search**. Direct `LIKE` scans work (~5s on a 4.8 GB database) but are painful for repeated or interactive use. `cotails` solves this with a two-phase architecture: **index** opencode's content into a Turso FTS5 database, then **search** that index in milliseconds.
 
-> **Status:** prototype. The current implementation does direct `LIKE` searches against the live opencode DB (phase 0). The FTS indexing architecture below is the goal. It will be transformed into an [`effect.ts`](https://effect.website) project next.
+> **Status:** prototype. The current implementation does direct regex searches against the live opencode DB (phase 0). The FTS indexing architecture below is the goal. It will be transformed into an [`effect.ts`](https://effect.website) project next.
 
-## Usage (current prototype — direct LIKE search)
+## Usage (current prototype — direct regex search)
 
 ```sh
-cotails <term> [term...] [options]
+cotails <pattern> [pattern...] [options]
 ```
+
+Terms are matched as **case-insensitive regular expressions** (AND'd together: a session must match every pattern). Matching runs as a `LIKE`-style scan over the live opencode DB via a JS-regex function registered with `node:sqlite`.
 
 ```
 Options:
-  --db <path>     Database path (default: auto-discover)
-  --limit <n>     Max results (default: 50)
-  --json          Output JSONL instead of human-readable
-  --title-only    Search session titles only
-  --no-snippet    Don't show text snippet
-  --type <type>   Part type to search: text, reasoning, tool (default: text)
+  --db <path>      Database path (default: auto-discover)
+  --limit <n>      Max results (default: 50)
+  --json           Output JSONL instead of human-readable
+  --title-only     Search session titles only
+  --no-snippet     Don't show text snippet
+  --type <type>    Part type to search: text, reasoning, tool (default: text)
+  -F, --fixed-strings   Treat patterns as literal strings, not regex
+  -s, --case-sensitive  Match case sensitively (default: case-insensitive)
 ```
 
 ### Examples
 
 ```sh
-cotails opencode journal          # sessions with both "opencode" and "journal"
+cotails opencode journal          # sessions matching "opencode" and "journal"
+cotails opencode 'event.*v2'      # "opencode" AND regex "event...v2"
 cotails turso wal --json          # JSONL output
 cotails --title-only compaction   # search titles only
 cotails --type reasoning memory   # search model reasoning text
+cotails 'foo.bar' -F              # literal "foo.bar" (no regex)
+cotails OpEnCoDe                  # case-insensitive by default
 ```
 
 ## Planned CLI (FTS index)
@@ -156,7 +163,7 @@ The current prototype resolves the opencode database by:
 2. Otherwise globs `~/.local/share/opencode/opencode*.db` and picks the **newest by mtime**
 3. Falls back to `~/.local/share/opencode/opencode-.db` (locally compiled build)
 
-It opens the DB **read-only** via Node's built-in `node:sqlite` (`DatabaseSync`), then runs the `EXISTS`-subquery-per-term pattern from the search SQL doc — one correlated semi-join per term, each short-circuiting on the first match:
+It opens the DB **read-only** via Node's built-in `node:sqlite` (`DatabaseSync`), then runs the `EXISTS`-subquery-per-term pattern — one correlated semi-join per term, each short-circuiting on the first match:
 
 ```sql
 SELECT s.id, s.slug, s.title,
@@ -166,12 +173,12 @@ FROM session s
 WHERE EXISTS (SELECT 1 FROM part p
               WHERE p.session_id = s.id
                 AND json_extract(p.data, '$.type') = 'text'
-                AND lower(json_extract(p.data, '$.text')) LIKE ?)
+                AND re(?, json_extract(p.data, '$.text')))
   AND EXISTS (...)   -- one per term
 ORDER BY s.time_updated DESC LIMIT 50
 ```
 
-Each term is bound as `'%term%'` (lowercased) so `LIKE` matches case-insensitively. The first matching part per session is surfaced as a preview snippet.
+Each term is bound as a JS regex pattern and matched by a custom `re(pattern, string)` function registered with `DatabaseSync#function()`. The function compiles with the `i` flag by default (case-insensitive), or no flags under `-s`/`--case-sensitive`; compiled regexes are cached by pattern. Under `-F`/`--fixed-strings`, regex metacharacters in the term are escaped so it matches literally. The first matching part per session is surfaced as a preview snippet.
 
 ### Text lives in `part.data`, not `message.data`
 
@@ -194,7 +201,7 @@ If the `part` table doesn't exist (V2-only databases), `cotails` falls back to s
 
 ## Status
 
-- **Phase 0 (done):** direct `LIKE` search against live opencode DB. Works, ~5s per query on a 4.8 GB database.
+- **Phase 0 (done):** direct scan against the live opencode DB, matching terms as case-insensitive JS regex. Works, ~5s per query on a 4.8 GB database.
 - **Phase 1 (next):** `cotails index` builds a Turso FTS5 index. `cotails search` queries it in milliseconds. Scopable by session, directory, project.
 - **Phase 2:** transform into an [`effect.ts`](https://effect.website) project.
 

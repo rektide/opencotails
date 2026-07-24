@@ -33,6 +33,30 @@ interface Args {
   titleOnly: boolean;
   showSnippet: boolean;
   typeFilter: PartType;
+  caseSensitive: boolean;
+  fixedStrings: boolean;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function patternFor(term: string, fixedStrings: boolean): string {
+  return fixedStrings ? escapeRegex(term) : term;
+}
+
+function registerRegex(db: DatabaseSync, caseSensitive: boolean): void {
+  const flags = caseSensitive ? "" : "i";
+  const cache = new Map<string, RegExp>();
+  db.function("re", { deterministic: true }, (pattern: string, string: unknown) => {
+    if (string == null) return 0;
+    let re = cache.get(pattern);
+    if (!re) {
+      re = new RegExp(pattern, flags);
+      cache.set(pattern, re);
+    }
+    return re.test(String(string)) ? 1 : 0;
+  });
 }
 
 function discoverDb(override?: string): string {
@@ -90,34 +114,37 @@ function schemaFor(mode: Mode, typeFilter: PartType): Schema {
 }
 
 function buildTitleQuery(args: Args): { sql: string; params: unknown[] } {
-  const where = args.terms.map(() => "title LIKE ? COLLATE NOCASE").join(" AND ");
-  const sql = `SELECT id, slug, title,
+  const where = args.terms.map(() => "re(?, title)").join(" AND ");
+  const sql = `SELECT id, slug, title, directory,
                       datetime(time_updated/1000, 'unixepoch') AS updated
                FROM session
                WHERE ${where}
                ORDER BY time_updated DESC LIMIT ?`;
-  return { sql, params: [...args.terms.map((t) => `%${t}%`), args.limit] };
+  return {
+    sql,
+    params: [...args.terms.map((t) => patternFor(t, args.fixedStrings)), args.limit],
+  };
 }
 
 function buildPartQuery(args: Args, mode: Mode): { sql: string; params: unknown[] } {
   const sch = schemaFor(mode, args.typeFilter);
   const exists = args.terms.map(
     () =>
-      `EXISTS (SELECT 1 FROM ${sch.table} WHERE ${sch.sessionRef} AND ${sch.typeExpr} AND lower(${sch.textExpr}) LIKE ?)`,
+      `EXISTS (SELECT 1 FROM ${sch.table} WHERE ${sch.sessionRef} AND ${sch.typeExpr} AND re(?, ${sch.textExpr}))`,
   );
   const snippetSelect = args.showSnippet
-    ? `, substr((SELECT ${sch.snippetExpr} FROM ${sch.table} WHERE ${sch.sessionRef} AND ${sch.typeExpr} AND lower(${sch.textExpr}) LIKE ? ORDER BY ${sch.orderCol} LIMIT 1), 1, 200) AS snippet`
+    ? `, substr((SELECT ${sch.snippetExpr} FROM ${sch.table} WHERE ${sch.sessionRef} AND ${sch.typeExpr} AND re(?, ${sch.textExpr}) ORDER BY ${sch.orderCol} LIMIT 1), 1, 200) AS snippet`
     : "";
-  const sql = `SELECT s.id, s.slug, s.title,
-                      datetime(s.time_updated/1000, 'unixepoch') AS updated${snippetSelect}
+  const sql = `SELECT s.id, s.slug, s.title, s.directory AS directory,
+                       datetime(s.time_updated/1000, 'unixepoch') AS updated${snippetSelect}
                FROM session s
                WHERE ${exists.join(" AND ")}
                ORDER BY s.time_updated DESC LIMIT ?`;
   const params: unknown[] = [];
   if (args.showSnippet) {
-    params.push(`%${args.terms[0].toLowerCase()}%`);
+    params.push(patternFor(args.terms[0], args.fixedStrings));
   }
-  for (const t of args.terms) params.push(`%${t.toLowerCase()}%`);
+  for (const t of args.terms) params.push(patternFor(t, args.fixedStrings));
   params.push(args.limit);
   return { sql, params };
 }
@@ -130,6 +157,8 @@ function parseArgs(argv: string[]): Args {
   let titleOnly = false;
   let showSnippet = true;
   let typeFilter: PartType = "text";
+  let caseSensitive = false;
+  let fixedStrings = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--db") {
@@ -146,6 +175,8 @@ function parseArgs(argv: string[]): Args {
     if (a === "--json") { json = true; continue; }
     if (a === "--title-only") { titleOnly = true; continue; }
     if (a === "--no-snippet") { showSnippet = false; continue; }
+    if (a === "-s" || a === "--case-sensitive") { caseSensitive = true; continue; }
+    if (a === "-F" || a === "--fixed-strings") { fixedStrings = true; continue; }
     if (a === "--type") {
       const v = argv[++i];
       if (v !== "text" && v !== "reasoning" && v !== "tool") {
@@ -161,24 +192,28 @@ function parseArgs(argv: string[]): Args {
     if (a.startsWith("--")) throw new Error(`unknown option: ${a}`);
     terms.push(a);
   }
-  return { terms, dbPath, limit, json, titleOnly, showSnippet, typeFilter };
+  return { terms, dbPath, limit, json, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings };
 }
 
 function printHelp(): void {
-  process.stdout.write(`Usage: cotails <term> [term...] [options]
+  process.stdout.write(`Usage: cotails <pattern> [pattern...] [options]
 
 Search opencode sessions for content matching ALL given terms.
+Terms are matched as case-insensitive regular expressions (AND'd together).
 
 Options:
-  --db <path>     Database path (default: auto-discover)
-  --limit <n>     Max results (default: 50)
-  --json          Output JSONL instead of human-readable
-  --title-only    Search session titles only
-  --no-snippet    Don't show text snippet
-  --type <type>   Part type to search: text, reasoning, tool (default: text)
+  --db <path>      Database path (default: auto-discover)
+  --limit <n>      Max results (default: 50)
+  --json           Output JSONL instead of human-readable
+  --title-only     Search session titles only
+  --no-snippet     Don't show text snippet
+  --type <type>    Part type to search: text, reasoning, tool (default: text)
+  -F, --fixed-strings   Treat patterns as literal strings, not regex
+  -s, --case-sensitive  Match case sensitively (default: case-insensitive)
 
 Examples:
-  cotails opencode journal          # sessions with both "opencode" and "journal"
+  cotails opencode journal          # sessions matching "opencode" and "journal"
+  cotails 'event.*v2'               # regex: "event" ... "v2"
   cotails turso wal --json          # JSONL output
   cotails --title-only compaction   # search titles only
 `);
@@ -194,10 +229,12 @@ function renderHuman(rows: Record<string, unknown>[], showSnippet: boolean): voi
     const title = (r.title as string) || "(untitled)";
     const updated = (r.updated as string) || "";
     const slug = (r.slug as string) || "";
+    const directory = (r.directory as string) || "";
     process.stdout.write(
       `${C.green}${id}${C.reset} ${C.bold}${title}${C.reset} ${C.grey}${updated}${C.reset}\n`,
     );
-    if (slug) process.stdout.write(`${C.grey}  ${slug}${C.reset}\n`);
+    const meta = [slug, directory].filter(Boolean).join(" · ");
+    if (meta) process.stdout.write(`${C.grey}  ${meta}${C.reset}\n`);
     if (showSnippet && r.snippet) {
       const snip = String(r.snippet).replace(/\s+/g, " ").trim().slice(0, 180);
       process.stdout.write(`${C.cyan}  ${snip}${C.reset}\n`);
@@ -236,6 +273,7 @@ function main(): void {
 
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
+    registerRegex(db, args.caseSensitive);
     const mode = detectMode(db);
     const { sql, params } = args.titleOnly
       ? buildTitleQuery(args)
