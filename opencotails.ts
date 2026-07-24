@@ -116,6 +116,7 @@ function schemaFor(mode: Mode, typeFilter: PartType): Schema {
 function buildTitleQuery(args: Args): { sql: string; params: unknown[] } {
   const where = args.terms.map(() => "re(?, title)").join(" AND ");
   const sql = `SELECT id, slug, title, directory,
+                      datetime(time_created/1000, 'unixepoch') AS created,
                       datetime(time_updated/1000, 'unixepoch') AS updated
                FROM session
                WHERE ${where}
@@ -136,6 +137,7 @@ function buildPartQuery(args: Args, mode: Mode): { sql: string; params: unknown[
     ? `, substr((SELECT ${sch.snippetExpr} FROM ${sch.table} WHERE ${sch.sessionRef} AND ${sch.typeExpr} AND re(?, ${sch.textExpr}) ORDER BY ${sch.orderCol} LIMIT 1), 1, 200) AS snippet`
     : "";
   const sql = `SELECT s.id, s.slug, s.title, s.directory AS directory,
+                       datetime(s.time_created/1000, 'unixepoch') AS created,
                        datetime(s.time_updated/1000, 'unixepoch') AS updated${snippetSelect}
                FROM session s
                WHERE ${exists.join(" AND ")}
@@ -228,10 +230,14 @@ function renderHuman(rows: Record<string, unknown>[], showSnippet: boolean): voi
     const id = r.id ? String(r.id).slice(0, 12) : "";
     const title = (r.title as string) || "(untitled)";
     const updated = (r.updated as string) || "";
+    const created = (r.created as string) || "";
+    const when = created && updated && created !== updated
+      ? `${created} → ${updated}`
+      : (updated || created);
     const slug = (r.slug as string) || "";
     const directory = (r.directory as string) || "";
     process.stdout.write(
-      `${C.green}${id}${C.reset} ${C.bold}${title}${C.reset} ${C.grey}${updated}${C.reset}\n`,
+      `${C.green}${id}${C.reset} ${C.bold}${title}${C.reset} ${C.grey}${when}${C.reset}\n`,
     );
     const meta = [slug, directory].filter(Boolean).join(" · ");
     if (meta) process.stdout.write(`${C.grey}  ${meta}${C.reset}\n`);
