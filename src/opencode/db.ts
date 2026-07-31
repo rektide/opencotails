@@ -28,6 +28,15 @@ export function openReadOnly(path: string): DatabaseSync {
   return new DatabaseSync(path, { readOnly: true });
 }
 
+export function existingTables(db: DatabaseSync): Set<string> {
+  return new Set(
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all()
+      .map((r) => (r as { name: string }).name),
+  );
+}
+
 export function registerRegex(db: DatabaseSync, caseSensitive: boolean): void {
   const flags = caseSensitive ? "" : "i";
   const cache = new Map<string, RegExp>();

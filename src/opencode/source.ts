@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { ContentQuery, SearchHit } from "./types.ts";
+import { existingTables } from "./db.ts";
 import { V1Source } from "./v1/source.ts";
 import { V2Source } from "./v2/source.ts";
 
@@ -39,12 +40,7 @@ export function buildContentQuery(schema: VersionSchema, q: ContentQuery): { sql
 }
 
 export function detectSources(db: DatabaseSync): Source[] {
-  const tables = new Set(
-    db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all()
-      .map((r) => (r as { name: string }).name),
-  );
+  const tables = existingTables(db);
   const sources: Source[] = [];
   if (tables.has("part")) sources.push(new V1Source(db));
   if (!tables.has("part") && tables.has("event")) sources.push(new V2Source(db));
