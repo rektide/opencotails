@@ -40,14 +40,44 @@ cotails search OpEnCoDe                  # case-insensitive by default
 
 ## Command surface
 
-`cotails` is split into subcommands. `search` (above) is the current, working command; `history` lists recently-active sessions. The FTS `index`/`status` commands below remain planned.
+`cotails` is split into subcommands. `search`, `history`, and `get-session` (below) are the current, working commands; the FTS `index`/`status` commands remain planned.
 
 ```
 cotails search <query> [options]  # search sessions for matching content (current)
 cotails history [options]         # list sessions active within a time window (current)
+cotails get-session [pid] [opts]  # resolve the active session id for an opencode PID (current)
 cotails index [options]           # build/update the FTS index from opencode's DB (planned)
 cotails status                    # show index coverage and freshness (planned)
 ```
+
+## `cotails history`
+
+List sessions active within a time window — the "what was I working on recently, and where?" view. Reads only session/message metadata (no body scans), so it needs no FTS index and runs in milliseconds regardless of database size.
+
+```sh
+cotails history                      # last 24h (default)
+cotails history --since 7d           # last week (--since accepts Nh, Nd, Nm, or an ISO date)
+cotails history --directory ~/src/foo
+cotails history --json               # JSONL (one object per line)
+cotails history --tsv                # tab-separated with a header line
+```
+
+Columns: session id, title, directory, messages in the window (`RECENT`), messages all-time (`TOTAL`), last-updated. `--json` emits ISO-8601 timestamps; `--tsv` emits epoch-ms. `--json` wins if both are given.
+
+## `cotails get-session`
+
+Resolve the **current active session id** for a running opencode process — answers "which session is *that* opencode instance on right now?". This is the foundation for a consolidated **session-information report** (the `SessionInfo` type it returns will grow as later tickets add model/cost/tokens/fork fields).
+
+```sh
+cotails get-session                   # via $OPENCODE_PID (or $OPENCODE_SESSION_ID)
+cotails get-session 992039            # explicit opencode PID
+cotails get-session --id-only         # bare id, for shell capture: sid=$(cotails get-session --id-only)
+cotails get-session --json            # full session object as JSONL
+cotails get-session -s ses_04602d85affe...   # look up a known id directly
+cotails get-session -C ~/src/foo      # match by directory instead of a PID
+```
+
+PID → session resolution: the PID's working directory (`/proc/<pid>/cwd`, the project root opencode runs in) is matched against the `session` table's `directory`, picking the most recently `time_updated` session. `$OPENCODE_DB` is read from the process environment to choose the database when set, otherwise the database is auto-discovered. opencode never writes its active session per-process and a TUI-mode process runs no HTTP listener, so the cwd+directory match is the reliable signal. The `session` table is shared across opencode v1 and v2, so this works against both. `$OPENCODE_SESSION_ID` (set by the [`opencode-session-id-plugin`](https://github.com/rektide/opencode-session-id-plugin) `shell.env` hook) short-circuits the lookup when present.
 
 ### `cotails index`
 
