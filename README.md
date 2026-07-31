@@ -1,4 +1,4 @@
-# opencotails
+# opencoattails
 
 `cotails` (a play on "tail" + cute name) is like [`rg`](https://github.com/BurntSushi/ripgrep) but for opencode sessions. It builds a full-text-search index over opencode's session history and runs fast, scopable queries against it.
 
@@ -9,7 +9,7 @@ opencode stores its full session history (messages, reasoning, tool calls, patch
 ## Usage (current prototype — direct regex search)
 
 ```sh
-cotails <pattern> [pattern...] [options]
+cotails search <pattern> [pattern...] [options]
 ```
 
 Terms are matched as **case-insensitive regular expressions** (AND'd together: a session must match every pattern). Matching runs as a `LIKE`-style scan over the live opencode DB via a JS-regex function registered with `node:sqlite`.
@@ -29,21 +29,24 @@ Options:
 ### Examples
 
 ```sh
-cotails opencode journal          # sessions matching "opencode" and "journal"
-cotails opencode 'event.*v2'      # "opencode" AND regex "event...v2"
-cotails turso wal --json          # JSONL output
-cotails --title-only compaction   # search titles only
-cotails --type reasoning memory   # search model reasoning text
-cotails 'foo.bar' -F              # literal "foo.bar" (no regex)
-cotails OpEnCoDe                  # case-insensitive by default
+cotails search opencode journal          # sessions matching "opencode" and "journal"
+cotails search opencode 'event.*v2'      # "opencode" AND regex "event...v2"
+cotails search turso wal --json          # JSONL output
+cotails search --title-only compaction   # search titles only
+cotails search --type reasoning memory   # search model reasoning text
+cotails search 'foo.bar' -F              # literal "foo.bar" (no regex)
+cotails search OpEnCoDe                  # case-insensitive by default
 ```
 
-## Planned CLI (FTS index)
+## Command surface
+
+`cotails` is split into subcommands. `search` (above) is the current, working command; `history` lists recently-active sessions. The FTS `index`/`status` commands below remain planned.
 
 ```
-cotails index [options]           # build/update the FTS index from opencode's DB
-cotails search <query> [options]  # FTS search against the index (default subcommand)
-cotails status                    # show index coverage and freshness
+cotails search <query> [options]  # search sessions for matching content (current)
+cotails history [options]         # list sessions active within a time window (current)
+cotails index [options]           # build/update the FTS index from opencode's DB (planned)
+cotails status                    # show index coverage and freshness (planned)
 ```
 
 ### `cotails index`
@@ -66,12 +69,12 @@ Incremental indexing tracks which sessions have been indexed and their `time_upd
 Fast FTS5 search against the pre-built index — milliseconds instead of seconds:
 
 ```
-cotails opencode journal                # FTS match, ranked by relevance
-cotails "turso WAL" --json              # phrase query, JSONL output
-cotails compaction --directory ~/src/bar  # scope to one directory's sessions
-cotails "event sourcing" --session <id>   # scope to one session
-cotails "tool call" --type tool           # search tool inputs/outputs only
-cotails --limit 10                       # top 10 by bm25 relevance
+cotails search opencode journal                # FTS match, ranked by relevance
+cotails search "turso WAL" --json              # phrase query, JSONL output
+cotails search compaction --directory ~/src/bar  # scope to one directory's sessions
+cotails search "event sourcing" --session <id>   # scope to one session
+cotails search "tool call" --type tool           # search tool inputs/outputs only
+cotails search --limit 10                       # top 10 by bm25 relevance
 ```
 
 ### `cotails status`
@@ -196,7 +199,7 @@ If the `part` table doesn't exist (V2-only databases), `cotails` falls back to s
 
 ## Requirements
 
-- **Node.js 22+** — uses the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module (`DatabaseSync`). No external npm packages, no native sqlite bindings. Run directly with `node opencotails.ts` (Node's TypeScript type-stripping handles the `.ts` source — no build step).
+- **Node.js 22+** — uses the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module (`DatabaseSync`). No external npm packages, no native sqlite bindings. Run directly with `node src/cli.ts` (Node's TypeScript type-stripping handles the `.ts` source — no build step). To put `cotails` on your PATH during development: `npm link` (reads the `bin` field in `package.json`).
 - **For the FTS index (planned):** the index database will use SQLite FTS5, readable by `node:sqlite`, the `turso` Rust crate, or any SQLite tool.
 
 ## Status
