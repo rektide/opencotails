@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import { discoverDb, openReadOnly, registerRegex } from "../opencode/db.ts";
 import { detectSources } from "../opencode/source.ts";
@@ -14,6 +15,8 @@ interface Args {
   typeFilter: PartType;
   caseSensitive: boolean;
   fixedStrings: boolean;
+  directory?: string;
+  sinceMs?: number;
 }
 
 function escapeRegex(s: string): string {
@@ -26,16 +29,21 @@ function patternFor(term: string, fixedStrings: boolean): string {
 
 function buildTitleQuery(args: Args): { sql: string; params: unknown[] } {
   const where = args.terms.map(() => "re(?, title)").join(" AND ");
+  const scopes: string[] = [];
+  if (args.directory !== undefined) scopes.push("instr(directory, ?) > 0");
+  if (args.sinceMs !== undefined) scopes.push("time_updated > ?");
+  const scopeClause = scopes.length ? ` AND ${scopes.join(" AND ")}` : "";
   const sql = `SELECT id, slug, title, directory,
                       datetime(time_created/1000, 'unixepoch') AS created,
                       datetime(time_updated/1000, 'unixepoch') AS updated
                FROM session
-               WHERE ${where}
+               WHERE ${where}${scopeClause}
                ORDER BY time_updated DESC LIMIT ?`;
-  return {
-    sql,
-    params: [...args.terms.map((t) => patternFor(t, args.fixedStrings)), args.limit],
-  };
+  const params: unknown[] = [...args.terms.map((t) => patternFor(t, args.fixedStrings))];
+  if (args.directory !== undefined) params.push(args.directory);
+  if (args.sinceMs !== undefined) params.push(args.sinceMs);
+  params.push(args.limit);
+  return { sql, params };
 }
 
 function contentRows(db: Parameters<typeof registerRegex>[0], args: Args): SearchHit[] {
@@ -44,6 +52,8 @@ function contentRows(db: Parameters<typeof registerRegex>[0], args: Args): Searc
     typeFilter: args.typeFilter,
     showSnippet: args.showSnippet,
     limit: args.limit,
+    directory: args.directory,
+    sinceMs: args.sinceMs,
   };
   const hits: SearchHit[] = [];
   const seen = new Set<string>();
@@ -98,6 +108,8 @@ function parseArgs(argv: string[]): Args {
   let typeFilter: PartType = "text";
   let caseSensitive = false;
   let fixedStrings = false;
+  let directory: string | undefined;
+  let sinceMs: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--db") {
@@ -109,6 +121,17 @@ function parseArgs(argv: string[]): Args {
       const v = argv[++i];
       limit = v === undefined ? NaN : parseInt(v, 10);
       if (!Number.isFinite(limit) || limit < 0) throw new Error("--limit requires a number");
+      continue;
+    }
+    if (a === "--directory") {
+      directory = argv[++i];
+      if (directory === undefined) throw new Error("--directory requires a path");
+      continue;
+    }
+    if (a === "--since") {
+      const v = argv[++i];
+      if (v === undefined) throw new Error("--since requires a value");
+      sinceMs = parseSince(v);
       continue;
     }
     if (a === "--json") { json = true; continue; }
@@ -131,7 +154,7 @@ function parseArgs(argv: string[]): Args {
     if (a.startsWith("--")) throw new Error(`unknown option: ${a}`);
     terms.push(a);
   }
-  return { terms, dbPath, limit, json, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings };
+  return { terms, dbPath, limit, json, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
 }
 
 export function printHelp(): void {
@@ -147,6 +170,8 @@ Options:
   --title-only     Search session titles only
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
+  --since <dur>    Only sessions updated after cutoff (24h, 7d, 30m, or ISO date)
+  --directory <p>  Only sessions whose directory contains <p>
   -F, --fixed-strings   Treat patterns as literal strings, not regex
   -s, --case-sensitive  Match case sensitively (default: case-insensitive)
 
@@ -155,6 +180,8 @@ Examples:
   cotail search 'event.*v2'               # regex: "event" ... "v2"
   cotail search turso wal --json          # JSONL output
   cotail search --title-only compaction   # search titles only
+  cotail search helpers --since 7d        # only recent sessions
+  cotail search helpers --directory ~/src/compfuzor
 `);
 }
 

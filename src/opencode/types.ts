@@ -5,6 +5,8 @@ export interface ContentQuery {
   typeFilter: PartType;
   showSnippet: boolean;
   limit: number;
+  directory?: string;
+  sinceMs?: number;
 }
 
 export interface SearchHit {

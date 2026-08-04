@@ -26,15 +26,21 @@ export function buildContentQuery(schema: VersionSchema, q: ContentQuery): { sql
   const snippetSelect = q.showSnippet
     ? `, substr((SELECT ${snippetExpr} FROM ${table} WHERE ${sessionRef} AND ${typeExpr} AND re(?, ${textExpr}) ORDER BY ${orderCol} LIMIT 1), 1, 200) AS snippet`
     : "";
+  const scopes: string[] = [];
+  if (q.directory !== undefined) scopes.push("instr(s.directory, ?) > 0");
+  if (q.sinceMs !== undefined) scopes.push("s.time_updated > ?");
+  const scopeClause = scopes.length ? ` AND ${scopes.join(" AND ")}` : "";
   const sql = `SELECT s.id, s.slug, s.title, s.directory AS directory,
                       datetime(s.time_created/1000, 'unixepoch') AS created,
                       datetime(s.time_updated/1000, 'unixepoch') AS updated${snippetSelect}
                FROM session s
-               WHERE ${exists.join(" AND ")}
+               WHERE ${exists.join(" AND ")}${scopeClause}
                ORDER BY s.time_updated DESC LIMIT ?`;
   const params: unknown[] = [];
   if (q.showSnippet) params.push(q.patterns[0]);
   for (const p of q.patterns) params.push(p);
+  if (q.directory !== undefined) params.push(q.directory);
+  if (q.sinceMs !== undefined) params.push(q.sinceMs);
   params.push(q.limit);
   return { sql, params };
 }

@@ -48,6 +48,8 @@ Options:
   --title-only     Search session titles only
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
+  --since <dur>    Only sessions updated after cutoff (24h, 7d, 30m, or ISO date)
+  --directory <p>  Only sessions whose directory contains <p>
   -F, --fixed-strings   Treat patterns as literal strings, not regex
   -s, --case-sensitive  Match case sensitively (default: case-insensitive)
 ```
@@ -60,7 +62,15 @@ cotail search --title-only compaction   # search titles only
 cotail search --type reasoning memory   # search model reasoning text
 cotail search 'foo.bar' -F              # literal "foo.bar" (no regex)
 cotail search OpEnCoDe                  # case-insensitive by default
+cotail search helpers --since 7d        # only sessions updated in the last week
+cotail search helpers --directory ~/src/compfuzor   # scope by directory
 ```
+
+`--since` and `--directory` are **scoping predicates**: they append to the outer `WHERE`
+clause and prune candidate sessions *before* the per-session EXISTS regex subquery runs.
+On a 3.5k-session DB they cut the scan to a small subset, so scoped queries return in
+milliseconds-to-seconds rather than the multi-second cost of an unscoped scan. Same
+grammar and semantics as `cotail history`'s `--since` / `--directory`.
 
 ## `cotail history`
 
