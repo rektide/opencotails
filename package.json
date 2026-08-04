@@ -4,7 +4,7 @@
   "description": "grep for opencode session history — search and browse sessions stored in opencode's SQLite database",
   "type": "module",
   "bin": {
-    "cotails": "src/cli.ts"
+    "cotail": "src/cli.ts"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -26,5 +26,8 @@
   "bugs": {
     "url": "https://github.com/rektide/opencoattails/issues"
   },
-  "homepage": "https://github.com/rektide/opencoattails#readme"
+  "homepage": "https://github.com/rektide/opencoattails#readme",
+  "dependencies": {
+    "opencoattails": "link:"
+  }
 }

@@ -4,14 +4,14 @@ import { run as history } from "./commands/history.ts";
 import { run as getSession } from "./commands/get-session.ts";
 
 function printHelp(): void {
-  process.stdout.write(`Usage: cotails <command> [options]
+  process.stdout.write(`Usage: cotail <command> [options]
 
 Commands:
   search <pattern> [pattern...]   Search opencode sessions for matching content
   history                         List sessions active within a time window
   get-session [pid]               Resolve the active session id for an opencode PID
 
-Run "cotails <command> --help" for command-specific options.
+Run "cotail <command> --help" for command-specific options.
 `);
 }
 

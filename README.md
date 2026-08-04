@@ -1,8 +1,8 @@
-# opencoattails
+# opencoattailss
 
-`cotails` (a play on "tail" + cute name) is like [`rg`](https://github.com/BurntTushi/ripgrep) but for opencode sessions — search and browse the session history opencode stores in its SQLite database.
+`cotail` (a play on "tail" + cute name) is like [`rg`](https://github.com/BurntTushi/ripgrep) but for opencode sessions — search and browse the session history opencode stores in its SQLite database.
 
-opencode writes its full session history (messages, reasoning, tool calls, patches) into a single WAL-mode SQLite database with **no FTS index and no built-in search**. `cotails` reads that DB and gives you fast, scopable queries: search session content, list recent sessions, or resolve the active session for a running opencode process.
+opencode writes its full session history (messages, reasoning, tool calls, patches) into a single WAL-mode SQLite database with **no FTS index and no built-in search**. `cotail` reads that DB and gives you fast, scopable queries: search session content, list recent sessions, or resolve the active session for a running opencode process.
 
 > **Status:** prototype (phase 0). Commands run **direct scans** against the live opencode DB today — no index, no build step, milliseconds to a few seconds per query. An FTS-indexed phase (`index`/`status`, sub-50ms search) is planned (see [Planned: FTS phase](#planned-fts-phase)).
 
@@ -12,8 +12,8 @@ Requires **Node.js 22+** (uses the built-in [`node:sqlite`](https://nodejs.org/a
 
 ```sh
 node src/cli.ts search opencode journal     # run from a checkout
-npm link                                     # put `cotails` on your PATH
-cotails history --since 7d
+npm link                                     # put `cotail` on your PATH
+cotail history --since 7d
 ```
 
 The database is auto-discovered: `$OPENCODE_DB` if set, else the newest
@@ -23,13 +23,13 @@ The database is auto-discovered: `$OPENCODE_DB` if set, else the newest
 
 | command | status | what it does |
 |---|---|---|
-| [`cotails search`](#cotails-search) | current | search session content (regex, AND'd terms) |
-| [`cotails history`](#cotails-history) | current | list sessions active within a time window |
-| [`cotails get-session`](#cotails-get-session) | current | resolve the active session id for an opencode PID |
-| `cotails index` | planned | build/update the FTS index |
-| `cotails status` | planned | show index coverage and freshness |
+| [`cotail search`](#cotail-search) | current | search session content (regex, AND'd terms) |
+| [`cotail history`](#cotail-history) | current | list sessions active within a time window |
+| [`cotail get-session`](#cotail-get-session) | current | resolve the active session id for an opencode PID |
+| `cotail index` | planned | build/update the FTS index |
+| `cotail status` | planned | show index coverage and freshness |
 
-## `cotails search`
+## `cotail search`
 
 Search session content. Terms are matched as **case-insensitive regular
 expressions**, AND'd together (a session must match every term). Today this is
@@ -37,7 +37,7 @@ a `LIKE`-style scan over the live opencode DB via a JS-regex function registered
 with `node:sqlite`.
 
 ```sh
-cotails search <pattern> [pattern...] [options]
+cotail search <pattern> [pattern...] [options]
 ```
 
 ```
@@ -53,42 +53,42 @@ Options:
 ```
 
 ```sh
-cotails search opencode journal          # sessions matching "opencode" and "journal"
-cotails search opencode 'event.*v2'      # "opencode" AND regex "event...v2"
-cotails search turso wal --json          # JSONL output
-cotails search --title-only compaction   # search titles only
-cotails search --type reasoning memory   # search model reasoning text
-cotails search 'foo.bar' -F              # literal "foo.bar" (no regex)
-cotails search OpEnCoDe                  # case-insensitive by default
+cotail search opencode journal          # sessions matching "opencode" and "journal"
+cotail search opencode 'event.*v2'      # "opencode" AND regex "event...v2"
+cotail search turso wal --json          # JSONL output
+cotail search --title-only compaction   # search titles only
+cotail search --type reasoning memory   # search model reasoning text
+cotail search 'foo.bar' -F              # literal "foo.bar" (no regex)
+cotail search OpEnCoDe                  # case-insensitive by default
 ```
 
-## `cotails history`
+## `cotail history`
 
 List sessions active within a time window — the "what was I working on recently,
 and where?" view. Reads only session/message metadata (no body scans), so it
 needs no FTS index and runs in milliseconds regardless of database size.
 
 ```sh
-cotails history                      # last 24h (default)
-cotails history --since 7d           # last week (--since accepts Nh, Nd, Nm, or an ISO date)
-cotails history --directory ~/src/foo
-cotails history --json               # JSONL (one object per line)
-cotails history --tsv                # tab-separated with a header line
+cotail history                      # last 24h (default)
+cotail history --since 7d           # last week (--since accepts Nh, Nd, Nm, or an ISO date)
+cotail history --directory ~/src/foo
+cotail history --json               # JSONL (one object per line)
+cotail history --tsv                # tab-separated with a header line
 ```
 
 Columns: session id, title, directory, messages in the window (`RECENT`), messages all-time (`TOTAL`), last-updated. `--json` emits ISO-8601 timestamps; `--tsv` emits epoch-ms. `--json` wins if both are given.
 
-## `cotails get-session`
+## `cotail get-session`
 
 Resolve the **current active session id** for a running opencode process — answers "which session is *that* opencode instance on right now?". The foundation for a consolidated **session-information report** (the `SessionInfo` type it returns will grow as later tickets add model/cost/tokens/fork fields).
 
 ```sh
-cotails get-session                   # via $OPENCODE_PID (or $OPENCODE_SESSION_ID)
-cotails get-session 992039            # explicit opencode PID
-cotails get-session --id-only         # bare id, for shell capture: sid=$(cotails get-session --id-only)
-cotails get-session --json            # full session object as JSONL
-cotails get-session -s ses_04602d85affe...   # look up a known id directly
-cotails get-session -C ~/src/foo      # match by directory instead of a PID
+cotail get-session                   # via $OPENCODE_PID (or $OPENCODE_SESSION_ID)
+cotail get-session 992039            # explicit opencode PID
+cotail get-session --id-only         # bare id, for shell capture: sid=$(cotail get-session --id-only)
+cotail get-session --json            # full session object as JSONL
+cotail get-session -s ses_04602d85affe...   # look up a known id directly
+cotail get-session -C ~/src/foo      # match by directory instead of a PID
 ```
 
 Resolution order (first that applies): positional `<pid>` → `$OPENCODE_PID` →
@@ -148,7 +148,7 @@ The readable text is **not** in the `message` table — only metadata (`role`, `
 
 ### V2 event fallback
 
-If the `part` table doesn't exist (V2-only databases), `cotails` falls back to searching the `event` table with the path `$.part.text` / `$.part.type`, filtered to event type `message.part.updated.1`.
+If the `part` table doesn't exist (V2-only databases), `cotail` falls back to searching the `event` table with the path `$.part.text` / `$.part.type`, filtered to event type `message.part.updated.1`.
 
 ## Planned: FTS phase
 
@@ -161,10 +161,10 @@ Turso FTS5 database, then **search** that index in milliseconds.
 ```mermaid
 graph LR
     OC[opencode SQLite WAL db<br/>the source]
-    subgraph "cotails"
+    subgraph "cotail"
         IDX[index phase<br/>read source, write FTS]
         SEARCH[search phase<br/>read FTS]
-        INDEXDB[(Turso FTS index db<br/>owned by cotails)]
+        INDEXDB[(Turso FTS index db<br/>owned by cotail)]
     end
     OC -->|short-lived read-only| IDX
     IDX -->|writes| INDEXDB
@@ -176,24 +176,24 @@ Two databases, two roles:
 | database | owner | engine | pattern |
 |---|---|---|---|
 | opencode's DB (`opencode-.db`) | opencode | SQLite WAL (C library) | short-lived read-only connections |
-| cotails index DB (`~/.local/share/cotails/index.db`) | cotails | Turso (SQLite-compatible) | long-lived, read/write |
+| cotail index DB (`~/.local/share/cotail/index.db`) | cotail | Turso (SQLite-compatible) | long-lived, read/write |
 
 ### Planned commands
 
 ```
-cotails index                           # index everything (incremental: only new/changed)
-cotails index --session <id>            # index one session
-cotails index --directory ~/src/foo     # index sessions under a directory
-cotails index --project <id>            # index sessions for a project
-cotails index --since 7d                # index sessions updated in the last 7 days
-cotails index --rebuild                 # drop and rebuild the entire index
+cotail index                           # index everything (incremental: only new/changed)
+cotail index --session <id>            # index one session
+cotail index --directory ~/src/foo     # index sessions under a directory
+cotail index --project <id>            # index sessions for a project
+cotail index --since 7d                # index sessions updated in the last 7 days
+cotail index --rebuild                 # drop and rebuild the entire index
 
-cotails search "turso WAL" --json              # phrase query, JSONL output
-cotails search compaction --directory ~/src/bar  # scope to one directory's sessions
-cotails search "event sourcing" --session <id>   # scope to one session
-cotails search "tool call" --type tool           # search tool inputs/outputs only
+cotail search "turso WAL" --json              # phrase query, JSONL output
+cotail search compaction --directory ~/src/bar  # scope to one directory's sessions
+cotail search "event sourcing" --session <id>   # scope to one session
+cotail search "tool call" --type tool           # search tool inputs/outputs only
 
-cotails status
+cotail status
 # sessions indexed:  2,687 / 2,687
 # parts indexed:     575,034
 # index size:        340 MB
@@ -213,7 +213,7 @@ CREATE TABLE indexed_session (
     title        TEXT,
     slug         TEXT,
     time_updated INTEGER,          -- from opencode, for incremental indexing
-    indexed_at   INTEGER           -- when cotails last indexed this session
+    indexed_at   INTEGER           -- when cotail last indexed this session
 );
 
 CREATE VIRTUAL TABLE parts_fts USING fts5(
@@ -243,7 +243,7 @@ LIMIT 20;
 ### Why a separate index database?
 
 - **Speed.** FTS5 `MATCH` is O(matches) not O(all rows). A 575k-part database goes from ~5s (LIKE scan) to <50ms (FTS lookup).
-- **No perturbation.** The index DB is owned by cotails. Reads and writes don't touch opencode's database at all.
+- **No perturbation.** The index DB is owned by cotail. Reads and writes don't touch opencode's database at all.
 - **Scoping.** Metadata columns (`directory`, `project_id`, `session_id`) enable filtered searches without re-reading opencode's schema.
 - **Portability.** The index DB is a single file — copy it, move it, ship it.
 - **Turso compatibility.** Built with SQLite FTS5, readable by the `turso` Rust crate or any SQLite tool.
@@ -251,7 +251,7 @@ LIMIT 20;
 ## Roadmap
 
 - **Phase 0 (done):** direct scan against the live opencode DB, matching terms as case-insensitive JS regex. Works, ~5s per query on a 4.8 GB database. Includes `history` (metadata-only recent activity) and `get-session` (active-session resolution).
-- **Phase 1 (next):** `cotails index` builds a Turso FTS5 index. `cotails search` queries it in milliseconds. Scopable by session, directory, project.
+- **Phase 1 (next):** `cotail index` builds a Turso FTS5 index. `cotail search` queries it in milliseconds. Scopable by session, directory, project.
 - **Phase 2:** transform into an [`effect.ts`](https://effect.website) project.
 
 ## Reference

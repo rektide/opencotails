@@ -135,7 +135,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 export function printHelp(): void {
-  process.stdout.write(`Usage: cotails search <pattern> [pattern...] [options]
+  process.stdout.write(`Usage: cotail search <pattern> [pattern...] [options]
 
 Search opencode sessions for content matching ALL given terms.
 Terms are matched as case-insensitive regular expressions (AND'd together).
@@ -151,10 +151,10 @@ Options:
   -s, --case-sensitive  Match case sensitively (default: case-insensitive)
 
 Examples:
-  cotails search opencode journal          # sessions matching "opencode" and "journal"
-  cotails search 'event.*v2'               # regex: "event" ... "v2"
-  cotails search turso wal --json          # JSONL output
-  cotails search --title-only compaction   # search titles only
+  cotail search opencode journal          # sessions matching "opencode" and "journal"
+  cotail search 'event.*v2'               # regex: "event" ... "v2"
+  cotail search turso wal --json          # JSONL output
+  cotail search --title-only compaction   # search titles only
 `);
 }
 

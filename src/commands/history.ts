@@ -77,7 +77,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 export function printHelp(): void {
-  process.stdout.write(`Usage: cotails history [options]
+  process.stdout.write(`Usage: cotail history [options]
 
 List opencode sessions active within a time window (default: last 24h).
 
@@ -90,10 +90,10 @@ Options:
   --db <path>        Database path (default: auto-discover)
 
 Examples:
-  cotails history                      # last 24h
-  cotails history --since 7d           # last week
-  cotails history --json               # JSONL
-  cotails history --directory ~/src/foo
+  cotail history                      # last 24h
+  cotail history --since 7d           # last week
+  cotail history --json               # JSONL
+  cotail history --directory ~/src/foo
 `);
 }
 

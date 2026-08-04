@@ -57,7 +57,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 export function printHelp(): void {
-  process.stdout.write(`Usage: cotails get-session [pid] [options]
+  process.stdout.write(`Usage: cotail get-session [pid] [options]
 
 Resolve the current active opencode session id for a running opencode process.
 
@@ -78,10 +78,10 @@ Options:
   -h, --help            Show this help
 
 Examples:
-  cotails get-session                   # via $OPENCODE_PID / $OPENCODE_SESSION_ID
-  cotails get-session 992039            # explicit opencode PID
-  cotails get-session --id-only         # bare id for shell capture
-  cotails get-session -s ses_04602d85affe...
+  cotail get-session                   # via $OPENCODE_PID / $OPENCODE_SESSION_ID
+  cotail get-session 992039            # explicit opencode PID
+  cotail get-session --id-only         # bare id for shell capture
+  cotail get-session -s ses_04602d85affe...
 `);
 }
 

@@ -50,7 +50,7 @@ function parseEnv(environ: string): Record<string, string> {
 }
 
 /**
- * Resolve a live opencode PID into the signals cotails needs: its working
+ * Resolve a live opencode PID into the signals cotail needs: its working
  * directory (the project root, used to find the active session) and the
  * $OPENCODE_DB it was told to use (if any).
  *
