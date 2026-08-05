@@ -9,6 +9,9 @@ sync-state.json
 last-touched
 .exclusive-lock
 
+# Atomic-write temp files left behind by bd (e.g. .~export-state.json.<pid>)
+.~*
+
 # Daemon runtime (lock, log, pid)
 daemon.*
 
