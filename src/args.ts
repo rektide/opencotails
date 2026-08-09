@@ -6,6 +6,13 @@ const UNITS: Record<string, number> = {
   w: 7 * 86_400_000,
 };
 
+export function parseDirectoryArg(value: string | undefined): string {
+  if (value === undefined || value.startsWith("-")) {
+    throw new Error("--directory requires a path");
+  }
+  return value;
+}
+
 export function parseSince(since: string): number {
   const m = /^(\d+)([smhdw])$/.exec(since);
   if (m) return Date.now() - Number(m[1]) * UNITS[m[2]]!;

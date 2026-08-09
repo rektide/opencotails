@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { parseSince } from "../args.ts";
+import { parseDirectoryArg, parseSince } from "../args.ts";
 import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
 import { discoverDb, openReadOnly } from "../opencode/db.ts";
 import { countActiveSessions } from "../opencode/session.ts";
@@ -41,8 +41,7 @@ function parseArgs(argv: string[]): Args {
       continue;
     }
     if (a === "--directory") {
-      directory = argv[++i];
-      if (directory === undefined) throw new Error("--directory requires a path");
+      directory = parseDirectoryArg(argv[++i]);
       continue;
     }
     if (a === "--db") {

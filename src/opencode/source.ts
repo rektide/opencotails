@@ -28,7 +28,7 @@ export function buildContentQuery(schema: VersionSchema, q: ContentQuery): { sql
     : "";
   const scopes: string[] = [];
   if (q.directory !== undefined) scopes.push("instr(s.directory, ?) > 0");
-  if (q.sinceMs !== undefined) scopes.push("s.time_updated > ?");
+  if (q.sinceMs !== undefined) scopes.push("s.time_updated >= ?");
   const scopeClause = scopes.length ? ` AND ${scopes.join(" AND ")}` : "";
   const sql = `SELECT s.id, s.slug, s.title, s.directory AS directory,
                       datetime(s.time_created/1000, 'unixepoch') AS created,

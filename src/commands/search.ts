@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { parseSince } from "../args.ts";
+import { parseDirectoryArg, parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import { discoverDb, openReadOnly, registerRegex } from "../opencode/db.ts";
 import { detectSources } from "../opencode/source.ts";
@@ -31,7 +31,7 @@ function buildTitleQuery(args: Args): { sql: string; params: unknown[] } {
   const where = args.terms.map(() => "re(?, title)").join(" AND ");
   const scopes: string[] = [];
   if (args.directory !== undefined) scopes.push("instr(directory, ?) > 0");
-  if (args.sinceMs !== undefined) scopes.push("time_updated > ?");
+  if (args.sinceMs !== undefined) scopes.push("time_updated >= ?");
   const scopeClause = scopes.length ? ` AND ${scopes.join(" AND ")}` : "";
   const sql = `SELECT id, slug, title, directory,
                       datetime(time_created/1000, 'unixepoch') AS created,
@@ -124,8 +124,7 @@ function parseArgs(argv: string[]): Args {
       continue;
     }
     if (a === "--directory") {
-      directory = argv[++i];
-      if (directory === undefined) throw new Error("--directory requires a path");
+      directory = parseDirectoryArg(argv[++i]);
       continue;
     }
     if (a === "--since") {
