@@ -2,6 +2,13 @@
 
 ## 2026-08-11
 
+- Implemented the adjudicated workspace through bounded V1 search in seven
+  commits. [`implementation0.md`](/query/implementation0.md) records package
+  boundaries, commit IDs, checks, and divergences.
+- Stopped before V2 normalization and history migration after read-only analysis
+  of 5,254 real sessions found 1,222 legacy/all-native count mismatches and 395
+  legacy/native-user-assistant mismatches. This activates the adjudication's
+  transition-authority stop condition; no universal precedence was encoded.
 - Added [`adjudication0.md`](/query/adjudication0.md), selecting refined Kysely
   over the baseline and Drizzle while narrowing initial implementation to domain,
   live-store, and test-contract packages. Both spikes were rerun byte-identically;

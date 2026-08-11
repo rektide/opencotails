@@ -6,6 +6,16 @@ opencode writes its full session history (messages, reasoning, tool calls, patch
 
 > **Status:** prototype (phase 0). Commands run **direct scans** against the live opencode DB today — no index, no build step, milliseconds to a few seconds per query. An FTS-indexed phase (`index`/`status`, sub-50ms search) is planned (see [Planned: FTS phase](#planned-fts-phase)).
 
+The direct-query implementation is now a pnpm workspace: domain contracts live
+in [`packages/query-domain`](/packages/query-domain/src/index.ts), while the
+private Kysely/`node:sqlite` integration lives in
+[`packages/opencode-live-store`](/packages/opencode-live-store/src/index.ts).
+Title and V1 content search support executable API-level `all`/`any`/`none`;
+existing positional CLI syntax remains AND-compatible and has no new boolean
+flags. V2 content normalization and history count precedence are intentionally
+not migrated because real transition data does not yet prove a safe authority
+rule. See the [implementation report](/.design/query/implementation0.md).
+
 ## Quickstart
 
 Requires **Node.js 22+** (uses the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module — no native bindings, no npm deps).

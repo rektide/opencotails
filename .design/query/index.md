@@ -46,4 +46,6 @@ Artifacts are added here in order:
 - [`adjudication0.md`](/query/adjudication0.md) - Selects refined Kysely over the
   baseline and Drizzle, records weighted evidence and hidden gaps, and provides a
   narrowed agent-ready implementation brief with runtime and semantic stop gates.
-- Implementation report and verification evidence.
+- [`implementation0.md`](/query/implementation0.md) - Records the implemented
+  three-package workspace and V1 bounded query migration, plus the real-data
+  authority mismatch that stopped V2/history migration before unsafe precedence.

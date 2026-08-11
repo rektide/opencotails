@@ -3,9 +3,10 @@
 This directory records the design evolution for cotail's session-selection,
 content-search, evidence, and storage architecture.
 
-Start with [`index.md`](/query/index.md). The current experiment compares typed
-query builders against the synthesized baseline, then refines and independently
-adjudicates the strongest proposal before implementation.
+Start with [`index.md`](/query/index.md). Kysely was selected and implemented
+through V1 bounded-boolean search. See
+[`implementation0.md`](/query/implementation0.md) for the package map, checks,
+and the real transition-data stop condition blocking V2/history precedence.
 
 Current invariants:
 
@@ -19,5 +20,10 @@ Current invariants:
 - SQL and query-builder mechanics remain behind operation-shaped interfaces;
 - implementation uses domain-decomposed workspace packages with explicit
   dependency direction.
+
+Current limitation: V2 normalization and history count replacement are not
+implemented. Real transition rows do not yet prove a reliable per-session
+content/count authority rule; preserving that uncertainty is required by the
+adjudication.
 
 Progress and handoffs are recorded in [`log.md`](/query/log.md).
