@@ -2,6 +2,11 @@
 
 ## 2026-08-11
 
+- Added [`draft-ksyley1.md`](/query/draft-ksyley1.md), refining the Kysely design
+  after reviewing Drizzle's successful fixture and criticisms. The refinement
+  reduces the runtime graph, narrows the async facade, makes native connection
+  ownership explicit, uses domain-shaped Kysely selections, and assigns Kysely
+  private index queries while keeping migrations as narrow cotail-owned SQL.
 - Added [`draft-drizzle0.md`](/query/draft-drizzle0.md). The supported
   `better-sqlite3` spike passed the representative mixed-layout query, while a
   custom `node:sqlite` session was rejected for internal Drizzle API coupling;

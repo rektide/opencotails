@@ -39,6 +39,9 @@ Artifacts are added here in order:
 - [`draft-drizzle0.md`](/query/draft-drizzle0.md) - Executable Drizzle
   counterproposal: stronger schema-centered and synchronous ergonomics, but only
   conditionally viable through a costed `better-sqlite3` driver swap.
-- Kysely refinement after reviewing Drizzle.
+- [`draft-ksyley1.md`](/query/draft-ksyley1.md) - Refined Kysely architecture
+  after direct Drizzle cross-review: smaller package graph, explicit async and
+  close ownership, selected domain-shaped rows, and Kysely-owned index queries
+  with narrow SQL migrations.
 - Independent adjudication and implementation brief.
 - Implementation report and verification evidence.
