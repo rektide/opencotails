@@ -7,7 +7,7 @@
     "cotail": "src/cli.ts"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.ts"
   },
   "repository": {
     "type": "git",
@@ -29,5 +29,11 @@
   "homepage": "https://github.com/rektide/opencoattails#readme",
   "dependencies": {
     "opencoattails": "link:"
+  },
+  "devDependencies": {
+    "@opencoattails/query-domain": "workspace:*",
+    "@opencoattails/test-contracts": "workspace:*",
+    "@types/node": "^26.2.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2"
   }
 }
