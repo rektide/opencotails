@@ -2,6 +2,10 @@
 
 ## 2026-08-11
 
+- Added [`draft-drizzle0.md`](/query/draft-drizzle0.md). The supported
+  `better-sqlite3` spike passed the representative mixed-layout query, while a
+  custom `node:sqlite` session was rejected for internal Drizzle API coupling;
+  native-addon installation and exact-version publication remain decisive costs.
 - Added [`draft-ksyley0.md`](/query/draft-ksyley0.md), the initial executable
   Kysely alternative, and verified its isolated `node:sqlite` fixture and strict
   type check with byte-identical generated SQL/results.
