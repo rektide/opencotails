@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { parseDirectoryArg } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
-import { discoverDb, openReadOnly } from "../opencode/db.ts";
-import { getSessionById, latestSessionByDirectory, type SessionInfo } from "../opencode/session-info.ts";
+import { discoverDb } from "../opencode/db.ts";
+import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
+import type { SessionSummary as SessionInfo } from "@opencoattails/query-domain";
 import { readProcInfo, resolvePidInput } from "../opencode/pid.ts";
 
 interface Args {
@@ -97,22 +98,22 @@ function renderHuman(info: SessionInfo, via: string): void {
   process.stdout.write(`${C.grey}  ${meta.join(" · ")}${C.reset}\n`);
 }
 
-function resolveSession(args: Args): { info: SessionInfo; via: string } {
+async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: string }> {
   // 1. explicit session id — no resolution needed
   if (args.sessionId) {
-    return loadAndReport(args, (db) => getSessionById(db, args.sessionId!), `session ${args.sessionId}`);
+    return loadAndReport(args, { selector: { ids: [args.sessionId] }, mode: "only" }, `session ${args.sessionId}`);
   }
 
   // 2. explicit directory — skip /proc, match the dir
   if (args.directory) {
-    return loadAndReport(args, (db) => latestSessionByDirectory(db, args.directory!), `directory ${args.directory}`);
+    return loadAndReport(args, { selector: { directory: { value: args.directory, mode: "exact" } }, mode: "latest" }, `directory ${args.directory}`);
   }
 
   // 3. direct env shortcut
   const envSid = process.env.OPENCODE_SESSION_ID;
   const pid = resolvePidInput(args.pid);
   if (envSid && args.pid === undefined) {
-    return loadAndReport(args, (db) => getSessionById(db, envSid), `$OPENCODE_SESSION_ID`);
+    return loadAndReport(args, { selector: { ids: [envSid] }, mode: "only" }, `$OPENCODE_SESSION_ID`);
   }
 
   // 4. PID via /proc
@@ -124,41 +125,41 @@ function resolveSession(args: Args): { info: SessionInfo; via: string } {
   const proc = readProcInfo(pid);
   const dbPath = args.dbPath ?? proc.db;
   const via = proc.comm ? `pid ${pid} (${proc.comm}) @ ${proc.cwd}` : `pid ${pid} @ ${proc.cwd}`;
-  const { db, close } = openDb(dbPath);
+  const { store, close } = openDb(dbPath);
   try {
-    const info = latestSessionByDirectory(db, proc.cwd);
+    const info = await store.resolve({ selector: { directory: { value: proc.cwd, mode: "exact" } }, mode: "latest" });
     if (!info) {
       throw new Error(`no session found for directory ${proc.cwd} (pid ${pid})`);
     }
     return { info, via };
   } finally {
-    close();
+    await close();
   }
 }
 
-function openDb(dbPath: string | undefined): { db: ReturnType<typeof openReadOnly>; close: () => void } {
+function openDb(dbPath: string | undefined): { store: ReturnType<typeof openOpencodeLiveStore>; close: () => Promise<void> } {
   const resolved = discoverDb(dbPath);
   if (!existsSync(resolved)) throw new Error(`db not found: ${resolved}`);
-  const db = openReadOnly(resolved);
-  return { db, close: () => db.close() };
+  const store = openOpencodeLiveStore(resolved);
+  return { store, close: () => store.close() };
 }
 
-function loadAndReport(
+async function loadAndReport(
   args: Args,
-  find: (db: ReturnType<typeof openReadOnly>) => SessionInfo | undefined,
+  request: Parameters<ReturnType<typeof openOpencodeLiveStore>["resolve"]>[0],
   via: string,
-): { info: SessionInfo; via: string } {
-  const { db, close } = openDb(args.dbPath);
+): Promise<{ info: SessionInfo; via: string }> {
+  const { store, close } = openDb(args.dbPath);
   try {
-    const info = find(db);
+    const info = await store.resolve(request);
     if (!info) throw new Error(`session not found (${via})`);
     return { info, via };
   } finally {
-    close();
+    await close();
   }
 }
 
-export function run(argv: string[]): void {
+export async function run(argv: string[]): Promise<void> {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -169,7 +170,7 @@ export function run(argv: string[]): void {
   }
 
   try {
-    const { info, via } = resolveSession(args);
+    const { info, via } = await resolveSession(args);
     if (args.idOnly) {
       process.stdout.write(info.id + "\n");
     } else if (args.json) {

@@ -15,15 +15,15 @@ Run "cotail <command> --help" for command-specific options.
 `);
 }
 
-export function main(): void {
+export async function main(): Promise<void> {
   const [sub, ...rest] = process.argv.slice(2);
   switch (sub) {
     case "search":
-      return search(rest);
+      return await search(rest);
     case "history":
-      return history(rest);
+      return await history(rest);
     case "get-session":
-      return getSession(rest);
+      return await getSession(rest);
     case "-h":
     case "--help":
     case "help":
@@ -39,4 +39,4 @@ export function main(): void {
   }
 }
 
-main();
+await main();

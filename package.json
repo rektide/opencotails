@@ -28,6 +28,7 @@
   },
   "homepage": "https://github.com/rektide/opencoattails#readme",
   "dependencies": {
+    "@opencoattails/opencode-live-store": "workspace:*",
     "opencoattails": "link:"
   },
   "devDependencies": {

@@ -11,6 +11,9 @@ importers:
 
   .:
     dependencies:
+      '@opencoattails/opencode-live-store':
+        specifier: workspace:*
+        version: link:packages/opencode-live-store
       opencoattails:
         specifier: 'link:'
         version: 'link:'

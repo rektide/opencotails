@@ -18,6 +18,8 @@ function fixture(): { directory: string; path: string } {
     create table message (id text, session_id text, time_created integer, data text);
     create table part (id text, message_id text, session_id text, time_created integer, data text);
     insert into session values ('s', 'p', null, 'slug', '/work', 'title', '1', 1, 2);
+    insert into session values ('newer', 'p2', 's', 'newer', '/work', 'newer', '2', 2, 4);
+    insert into session values ('other', 'p2', null, 'other', '/other', 'other', '2', 3, 3);
   `);
   database.close();
   return { directory, path };
@@ -62,6 +64,22 @@ test("store close is idempotent and operations after close fail", async () => {
     await store.close();
     await assert.rejects(store.resolve({ selector: {}, mode: "latest" }), /store closed/);
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("resolve lowers selectors, ranges, and latest versus only", async () => {
+  const { directory, path } = fixture();
+  const store = openOpencodeLiveStore(path);
+  try {
+    assert.equal((await store.resolve({ selector: {}, mode: "latest" }))?.id, "newer");
+    assert.equal((await store.resolve({ selector: { ids: ["s"] }, mode: "only" }))?.id, "s");
+    assert.equal((await store.resolve({ selector: { projectIds: ["p2"] }, mode: "only" })), undefined);
+    assert.equal((await store.resolve({ selector: { directory: { mode: "exact", value: "/work" } }, mode: "latest" }))?.id, "newer");
+    assert.equal((await store.resolve({ selector: { directory: { mode: "contains", value: "other" } }, mode: "latest" }))?.id, "other");
+    assert.equal((await store.resolve({ selector: { updated: { from: 3, to: 4 } }, mode: "latest" }))?.id, "other");
+  } finally {
+    await store.close();
     rmSync(directory, { recursive: true, force: true });
   }
 });

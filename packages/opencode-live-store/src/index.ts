@@ -11,6 +11,7 @@ import { Kysely, SqliteDialect } from "kysely";
 import { NodeSqliteDatabase } from "./runtime/node-sqlite.ts";
 import { detectCapabilities } from "./schema/capabilities.ts";
 import type { OpencodeDatabase } from "./schema/tables.ts";
+import { resolveSession } from "./query/session-row.ts";
 
 export interface OpenedOpencodeLiveStore {
   searchDirect(request: DirectSearchRequest): Promise<readonly DirectSearchHit[]>;
@@ -54,9 +55,9 @@ export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = 
       assertOpen();
       throw new Error("history not implemented");
     },
-    async resolve(_request) {
+    async resolve(request) {
       assertOpen();
-      throw new Error("resolve not implemented");
+      return resolveSession(database, request);
     },
     async close() {
       if (closed) return;
