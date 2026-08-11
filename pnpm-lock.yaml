@@ -28,6 +28,19 @@ importers:
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
 
+  packages/opencode-live-store:
+    dependencies:
+      '@opencoattails/query-domain':
+        specifier: workspace:*
+        version: link:../query-domain
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
+    devDependencies:
+      '@opencoattails/test-contracts':
+        specifier: workspace:*
+        version: link:../test-contracts
+
   packages/query-domain: {}
 
   packages/test-contracts:
@@ -88,6 +101,10 @@ packages:
     engines: {node: '>=16.20.0'}
     hasBin: true
 
+  kysely@0.29.5:
+    resolution: {integrity: sha512-ooa+eSbBNPTo3MycPEuW5jdrxQdQwdtB3LC3h43FiXQbIry5tR0C5lDG7eealK0E4D7XjrnOP5DIUg/LyjRMYQ==}
+    engines: {node: '>=22.0.0'}
+
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
@@ -127,5 +144,7 @@ snapshots:
       '@typescript/native-preview-linux-x64': 7.0.0-dev.20260707.2
       '@typescript/native-preview-win32-arm64': 7.0.0-dev.20260707.2
       '@typescript/native-preview-win32-x64': 7.0.0-dev.20260707.2
+
+  kysely@0.29.5: {}
 
   undici-types@8.3.0: {}
