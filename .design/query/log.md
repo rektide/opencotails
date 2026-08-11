@@ -2,6 +2,11 @@
 
 ## 2026-08-11
 
+- Added [`adjudication0.md`](/query/adjudication0.md), selecting refined Kysely
+  over the baseline and Drizzle while narrowing initial implementation to domain,
+  live-store, and test-contract packages. Both spikes were rerun byte-identically;
+  minimum-Node read-only execution, real mixed-layout authority, complete bounded
+  boolean lowering, and V2 array extraction remain mandatory gates.
 - Added [`draft-ksyley1.md`](/query/draft-ksyley1.md), refining the Kysely design
   after reviewing Drizzle's successful fixture and criticisms. The refinement
   reduces the runtime graph, narrows the async facade, makes native connection

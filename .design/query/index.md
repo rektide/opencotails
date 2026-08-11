@@ -43,5 +43,7 @@ Artifacts are added here in order:
   after direct Drizzle cross-review: smaller package graph, explicit async and
   close ownership, selected domain-shaped rows, and Kysely-owned index queries
   with narrow SQL migrations.
-- Independent adjudication and implementation brief.
+- [`adjudication0.md`](/query/adjudication0.md) - Selects refined Kysely over the
+  baseline and Drizzle, records weighted evidence and hidden gaps, and provides a
+  narrowed agent-ready implementation brief with runtime and semantic stop gates.
 - Implementation report and verification evidence.
