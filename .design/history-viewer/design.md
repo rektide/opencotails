@@ -210,8 +210,10 @@ ses_049b7839effeWEP11T6eeaLy7v	History viewer subcommand design	/home/rektide/sr
 
 - **Message-body preview / snippets** — that's `search`'s job; history stays
   metadata-only and fast.
-- **`--follow` / live watch** — would need the CDC engine (`opencode-session-fab`),
-  out of scope here.
+- **`--follow` / live watch** — out of scope here. A snapshot watcher can use
+  the history projection without full CDC; exact activity needs a journal or
+  durable-log source. See the later
+  [`watch` research](/.design/watch/README.md).
 - **Session detail / transcript dump** — separate planned command (see
   `.design/v2.md` "session-dump ticket").
 - **FTS index dependency** — explicitly none; history reads the live DB directly.
