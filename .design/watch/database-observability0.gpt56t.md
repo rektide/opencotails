@@ -69,7 +69,8 @@ Inspection of
 
 | Observation | Result | Consequence |
 | --- | ---: | --- |
-| `session` rows | 5,254 | An all-time list exists, but cannot be legibly shown all at once. |
+| legacy `session` rows | 5,254 | The current history query sees only this generation. |
+| native `session_v2` rows | 5,562 | Current history/watch reuse would omit at least 308 newer IDs. |
 | Persisted `event` rows grouped by type | none | This database cannot currently supply a durable fine-grained event feed. |
 | `session.time_updated` index | none | Membership and ranking require a small full session scan plus sort. |
 | `message` index | `(session_id, time_created, id)` | Total and recent counts are efficient per selected session. |
@@ -80,7 +81,12 @@ a temporary B-tree for `ORDER BY`, and covering-index searches for both message
 count subqueries. At this scale the metadata scan is reasonable, but doing
 count subqueries for thousands of off-screen rows is unnecessary work.
 
-This is one local data point, not a schema guarantee. The source already detects
+This is one local data point, not a schema guarantee. It exposes a prerequisite:
+the watch inventory must normalize both `session` and `session_v2`, deduplicate
+overlapping IDs, and prefer the current native projection. Reusing
+`countActiveSessions` unchanged cannot satisfy “everything available.”
+
+The source already detects
 V1 content in `part` and V2 content in `event` for search
 ([`source.ts`](/src/opencode/source.ts#L48-L53)); watch must similarly tolerate
 different table populations instead of equating table existence with useful
@@ -151,7 +157,8 @@ changed since the prior sample**.
 Use a long-lived read-only connection and two operation-shaped reads:
 
 1. Sample session identity and metadata for the selected universe, ordered by
-   the rank key. Do not touch message bodies.
+   the rank key. Normalize legacy `session` and native `session_v2`; do not touch
+   message bodies.
 2. Enrich only newly visible, changed, or explicitly requested rows with
    recent/total counts.
 
@@ -168,6 +175,9 @@ not depend on a particular millisecond default.
 
 - Polling can miss intermediate updates and cannot reconstruct exact ordering
   inside an interval.
+- The metadata source is currently split across legacy `session` and native
+  `session_v2`; normalization must precede watch and should later be shared by
+  finite history.
 - `time_updated` is a coarse activity signal; changes to pending work or live
   execution may not map cleanly onto it.
 - A V2 event subscription may be volatile, while a durable log may need cursor
@@ -202,3 +212,6 @@ Ship the first watch slice as a projection watcher with explicit fidelity:
   catalogs richer live execution, step, tool, pending-input, and attention
   signals. Those are candidates for a later high-fidelity observation source,
   not requirements for the polling baseline.
+- [`source-and-lifecycle0.explore.md`](/.design/watch/source-and-lifecycle0.explore.md)
+  supplies the hybrid filesystem/data-version monitor, current `session_v2`
+  compatibility gate, and exact-event source options.
