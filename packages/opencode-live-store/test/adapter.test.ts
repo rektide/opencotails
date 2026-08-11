@@ -20,6 +20,12 @@ function fixture(): { directory: string; path: string } {
     insert into session values ('s', 'p', null, 'slug', '/work', 'title', '1', 1, 2);
     insert into session values ('newer', 'p2', 's', 'newer', '/work', 'newer', '2', 2, 4);
     insert into session values ('other', 'p2', null, 'other', '/other', 'other', '2', 3, 3);
+    insert into message values ('m-s', 's', 1, '{"role":"user"}');
+    insert into message values ('m-newer-a', 'newer', 2, '{"role":"user"}');
+    insert into message values ('m-newer-b', 'newer', 3, '{"role":"assistant"}');
+    insert into part values ('p-s', 'm-s', 's', 1, '{"type":"text","text":"alpha beta"}');
+    insert into part values ('p-newer-a', 'm-newer-a', 'newer', 2, '{"type":"text","text":"alpha only"}');
+    insert into part values ('p-newer-b', 'm-newer-b', 'newer', 3, '{"type":"text","text":"beta only"}');
   `);
   database.close();
   return { directory, path };
@@ -95,6 +101,31 @@ test("title search executes all, any, none, case, literal, scopes, ordering, and
     assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: "NEWER", caseSensitive: true }] } })).map((hit) => hit.session.id), []);
     assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: ".*", mode: "literal" }] } })).map((hit) => hit.session.id), []);
     assert.deepEqual((await store.searchDirect({ ...base, selector: { directory: { mode: "contains", value: "work" }, updated: { from: 2, to: 5 } }, title: { any: [{ source: "." }] }, limit: 1 })).map((hit) => hit.session.id), ["newer"]);
+  } finally {
+    await store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("V1 content search keeps independent requirements and first evidence", async () => {
+  const { directory, path } = fixture();
+  const store = openOpencodeLiveStore(path);
+  try {
+    const hits = await store.searchDirect({
+      selector: {},
+      requirements: { all: ["alpha", "beta"].map((source) => ({ types: ["text"], text: { all: [{ source }] } })) },
+      evidence: true,
+      limit: 10,
+    });
+    assert.deepEqual(hits.map((hit) => hit.session.id), ["newer", "s"]);
+    assert.deepEqual(hits.map((hit) => hit.evidenceText), ["alpha only", "alpha beta"]);
+    const sameWitness = await store.searchDirect({
+      selector: {},
+      requirements: { all: [{ types: ["text"], text: { all: [{ source: "alpha" }, { source: "beta" }] } }] },
+      evidence: false,
+      limit: 10,
+    });
+    assert.deepEqual(sameWitness.map((hit) => hit.session.id), ["s"]);
   } finally {
     await store.close();
     rmSync(directory, { recursive: true, force: true });

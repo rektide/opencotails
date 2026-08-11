@@ -13,6 +13,7 @@ import { detectCapabilities } from "./schema/capabilities.ts";
 import type { OpencodeDatabase } from "./schema/tables.ts";
 import { resolveSession } from "./query/session-row.ts";
 import { searchTitles } from "./query/title.ts";
+import { searchV1Content } from "./query/content.ts";
 
 export interface OpenedOpencodeLiveStore {
   searchDirect(request: DirectSearchRequest): Promise<readonly DirectSearchHit[]>;
@@ -51,7 +52,7 @@ export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = 
     async searchDirect(request) {
       assertOpen();
       if (request.title !== undefined) return searchTitles(database, request);
-      throw new Error("content search not implemented");
+      return searchV1Content(database, request);
     },
     async history(_request) {
       assertOpen();

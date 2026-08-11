@@ -1,10 +1,9 @@
 import { existsSync } from "node:fs";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
-import { discoverDb, openReadOnly, registerRegex } from "../opencode/db.ts";
+import { discoverDb } from "../opencode/db.ts";
 import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
-import { detectSources } from "../opencode/source.ts";
-import type { ContentQuery, PartType, SearchHit } from "../opencode/types.ts";
+import type { PartType, SearchHit } from "../opencode/types.ts";
 
 interface Args {
   terms: string[];
@@ -18,14 +17,6 @@ interface Args {
   fixedStrings: boolean;
   directory?: string;
   sinceMs?: number;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function patternFor(term: string, fixedStrings: boolean): string {
-  return fixedStrings ? escapeRegex(term) : term;
 }
 
 function sqliteDate(milliseconds: number): string {
@@ -53,26 +44,29 @@ async function titleRows(path: string, args: Args): Promise<SearchHit[]> {
   }
 }
 
-function contentRows(db: Parameters<typeof registerRegex>[0], args: Args): SearchHit[] {
-  const q: ContentQuery = {
-    patterns: args.terms.map((t) => patternFor(t, args.fixedStrings)),
-    typeFilter: args.typeFilter,
-    showSnippet: args.showSnippet,
-    limit: args.limit,
-    directory: args.directory,
-    sinceMs: args.sinceMs,
-  };
-  const hits: SearchHit[] = [];
-  const seen = new Set<string>();
-  for (const source of detectSources(db)) {
-    for (const h of source.searchContent(q)) {
-      if (!seen.has(h.id)) {
-        seen.add(h.id);
-        hits.push(h);
-      }
-    }
+async function contentRows(path: string, args: Args): Promise<SearchHit[]> {
+  const store = openOpencodeLiveStore(path);
+  try {
+    const hits = await store.searchDirect({
+      selector: {
+        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
+        updated: args.sinceMs === undefined ? undefined : { from: args.sinceMs },
+      },
+      requirements: { all: args.terms.map((source) => ({
+        types: [args.typeFilter],
+        text: { all: [{ source, mode: args.fixedStrings ? "literal" : "regex", caseSensitive: args.caseSensitive }] },
+      })) },
+      evidence: args.showSnippet,
+      limit: args.limit,
+    });
+    return hits.map(({ session, evidenceText }) => ({
+      id: session.id, slug: session.slug, title: session.title, directory: session.directory,
+      created: sqliteDate(session.timeCreated), updated: sqliteDate(session.timeUpdated),
+      ...(evidenceText === undefined ? {} : { snippet: evidenceText }),
+    }));
+  } finally {
+    await store.close();
   }
-  return hits;
 }
 
 function renderHuman(rows: SearchHit[], showSnippet: boolean): void {
@@ -217,20 +211,7 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  if (args.titleOnly) {
-    const rows = await titleRows(dbPath, args);
-    if (args.json) emitJsonl(rows);
-    else renderHuman(rows, args.showSnippet);
-    return;
-  }
-
-  const db = openReadOnly(dbPath);
-  try {
-    registerRegex(db, args.caseSensitive);
-    const rows = contentRows(db, args);
-    if (args.json) emitJsonl(rows);
-    else renderHuman(rows, args.showSnippet);
-  } finally {
-    db.close();
-  }
+  const rows = args.titleOnly ? await titleRows(dbPath, args) : await contentRows(dbPath, args);
+  if (args.json) emitJsonl(rows);
+  else renderHuman(rows, args.showSnippet);
 }
