@@ -33,7 +33,9 @@
 
 Artifacts are added here in order:
 
-- Kysely initial proposal.
+- [`draft-ksyley0.md`](/query/draft-ksyley0.md) - Executable Kysely 0.29.x
+  proposal with a proven select-only `node:sqlite` adapter, package-enforced live
+  metadata authority, and mixed V1/V2 normalization.
 - Drizzle counterproposal informed by the Kysely proposal.
 - Kysely refinement after reviewing Drizzle.
 - Independent adjudication and implementation brief.

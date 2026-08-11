@@ -2,6 +2,9 @@
 
 ## 2026-08-11
 
+- Added [`draft-ksyley0.md`](/query/draft-ksyley0.md), the initial executable
+  Kysely alternative, and verified its isolated `node:sqlite` fixture and strict
+  type check with byte-identical generated SQL/results.
 - Started the typed query-builder wave under epic `cotail-query-builder`.
 - Established [`packet-query-builders0.md`](/query/packet-query-builders0.md) as
   the shared handoff packet for Kysely, Drizzle, refinement, adjudication, and
