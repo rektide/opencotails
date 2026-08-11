@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import { discoverDb, openReadOnly, registerRegex } from "../opencode/db.ts";
+import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import { detectSources } from "../opencode/source.ts";
 import type { ContentQuery, PartType, SearchHit } from "../opencode/types.ts";
 
@@ -27,23 +28,29 @@ function patternFor(term: string, fixedStrings: boolean): string {
   return fixedStrings ? escapeRegex(term) : term;
 }
 
-function buildTitleQuery(args: Args): { sql: string; params: unknown[] } {
-  const where = args.terms.map(() => "re(?, title)").join(" AND ");
-  const scopes: string[] = [];
-  if (args.directory !== undefined) scopes.push("instr(directory, ?) > 0");
-  if (args.sinceMs !== undefined) scopes.push("time_updated >= ?");
-  const scopeClause = scopes.length ? ` AND ${scopes.join(" AND ")}` : "";
-  const sql = `SELECT id, slug, title, directory,
-                      datetime(time_created/1000, 'unixepoch') AS created,
-                      datetime(time_updated/1000, 'unixepoch') AS updated
-               FROM session
-               WHERE ${where}${scopeClause}
-               ORDER BY time_updated DESC LIMIT ?`;
-  const params: unknown[] = [...args.terms.map((t) => patternFor(t, args.fixedStrings))];
-  if (args.directory !== undefined) params.push(args.directory);
-  if (args.sinceMs !== undefined) params.push(args.sinceMs);
-  params.push(args.limit);
-  return { sql, params };
+function sqliteDate(milliseconds: number): string {
+  return new Date(milliseconds).toISOString().slice(0, 19).replace("T", " ");
+}
+
+async function titleRows(path: string, args: Args): Promise<SearchHit[]> {
+  const store = openOpencodeLiveStore(path);
+  try {
+    const hits = await store.searchDirect({
+      selector: {
+        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
+        updated: args.sinceMs === undefined ? undefined : { from: args.sinceMs },
+      },
+      title: { all: args.terms.map((source) => ({ source, mode: args.fixedStrings ? "literal" : "regex", caseSensitive: args.caseSensitive })) },
+      evidence: false,
+      limit: args.limit,
+    });
+    return hits.map(({ session }) => ({
+      id: session.id, slug: session.slug, title: session.title, directory: session.directory,
+      created: sqliteDate(session.timeCreated), updated: sqliteDate(session.timeUpdated),
+    }));
+  } finally {
+    await store.close();
+  }
 }
 
 function contentRows(db: Parameters<typeof registerRegex>[0], args: Args): SearchHit[] {
@@ -184,7 +191,7 @@ Examples:
 `);
 }
 
-export function run(argv: string[]): void {
+export async function run(argv: string[]): Promise<void> {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -210,16 +217,17 @@ export function run(argv: string[]): void {
     process.exit(1);
   }
 
+  if (args.titleOnly) {
+    const rows = await titleRows(dbPath, args);
+    if (args.json) emitJsonl(rows);
+    else renderHuman(rows, args.showSnippet);
+    return;
+  }
+
   const db = openReadOnly(dbPath);
   try {
     registerRegex(db, args.caseSensitive);
-    let rows: SearchHit[];
-    if (args.titleOnly) {
-      const q = buildTitleQuery(args);
-      rows = db.prepare(q.sql).all(...q.params) as SearchHit[];
-    } else {
-      rows = contentRows(db, args);
-    }
+    const rows = contentRows(db, args);
     if (args.json) emitJsonl(rows);
     else renderHuman(rows, args.showSnippet);
   } finally {

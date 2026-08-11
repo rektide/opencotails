@@ -81,6 +81,7 @@ export function validateDirectSearchRequest(request: DirectSearchRequest): void 
   validateSessionSelector(request.selector);
   validateLimit(request.limit);
   if (request.title === undefined && request.requirements === undefined) throw new Error("search requires title or content requirements");
+  if (request.title !== undefined && request.requirements !== undefined) throw new Error("title and content search cannot be combined");
   if (request.title !== undefined) validatePatternSet(request.title);
   if (request.requirements !== undefined) validateContentRequirements(request.requirements);
 }

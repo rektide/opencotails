@@ -12,6 +12,7 @@ import { NodeSqliteDatabase } from "./runtime/node-sqlite.ts";
 import { detectCapabilities } from "./schema/capabilities.ts";
 import type { OpencodeDatabase } from "./schema/tables.ts";
 import { resolveSession } from "./query/session-row.ts";
+import { searchTitles } from "./query/title.ts";
 
 export interface OpenedOpencodeLiveStore {
   searchDirect(request: DirectSearchRequest): Promise<readonly DirectSearchHit[]>;
@@ -26,16 +27,16 @@ export interface OpenStoreOptions {
 
 export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = {}): OpenedOpencodeLiveStore {
   const native = new DatabaseSync(path, { readOnly: true });
-  const flags = options.caseSensitive ? "" : "i";
   const cache = new Map<string, RegExp>();
-  native.function("re", { deterministic: true }, (...values: SQLOutputValue[]) => {
-    const pattern = String(values[0]);
-    const value = values[1];
+  native.function("re", { deterministic: true }, (patternValue: SQLOutputValue, value: SQLOutputValue, sensitivity: SQLOutputValue) => {
+    const pattern = String(patternValue);
+    const caseSensitive = sensitivity === 1;
     if (value == null) return 0;
-    let expression = cache.get(pattern);
+    const key = `${caseSensitive ? "s" : "i"}:${pattern}`;
+    let expression = cache.get(key);
     if (expression === undefined) {
-      expression = new RegExp(pattern, flags);
-      cache.set(pattern, expression);
+      expression = new RegExp(pattern, caseSensitive ? "" : "i");
+      cache.set(key, expression);
     }
     return expression.test(String(value)) ? 1 : 0;
   });
@@ -47,9 +48,10 @@ export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = 
     if (closed) throw new Error("store closed");
   };
   return {
-    async searchDirect(_request) {
+    async searchDirect(request) {
       assertOpen();
-      throw new Error("searchDirect not implemented");
+      if (request.title !== undefined) return searchTitles(database, request);
+      throw new Error("content search not implemented");
     },
     async history(_request) {
       assertOpen();

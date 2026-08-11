@@ -83,3 +83,20 @@ test("resolve lowers selectors, ranges, and latest versus only", async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("title search executes all, any, none, case, literal, scopes, ordering, and limit", async () => {
+  const { directory, path } = fixture();
+  const store = openOpencodeLiveStore(path);
+  try {
+    const base = { selector: {}, requirements: undefined, evidence: false, limit: 10 } as const;
+    assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: "title" }] } })).map((hit) => hit.session.id), ["s"]);
+    assert.deepEqual((await store.searchDirect({ ...base, title: { any: [{ source: "newer" }, { source: "other" }] } })).map((hit) => hit.session.id), ["newer", "other"]);
+    assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: "newer" }], none: [{ source: "other" }] } })).map((hit) => hit.session.id), ["newer"]);
+    assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: "NEWER", caseSensitive: true }] } })).map((hit) => hit.session.id), []);
+    assert.deepEqual((await store.searchDirect({ ...base, title: { all: [{ source: ".*", mode: "literal" }] } })).map((hit) => hit.session.id), []);
+    assert.deepEqual((await store.searchDirect({ ...base, selector: { directory: { mode: "contains", value: "work" }, updated: { from: 2, to: 5 } }, title: { any: [{ source: "." }] }, limit: 1 })).map((hit) => hit.session.id), ["newer"]);
+  } finally {
+    await store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
