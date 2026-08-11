@@ -23,9 +23,11 @@ function fixture(): { directory: string; path: string } {
     insert into message values ('m-s', 's', 1, '{"role":"user"}');
     insert into message values ('m-newer-a', 'newer', 2, '{"role":"user"}');
     insert into message values ('m-newer-b', 'newer', 3, '{"role":"assistant"}');
+    insert into message values ('m-other', 'other', 3, '{"role":"user"}');
     insert into part values ('p-s', 'm-s', 's', 1, '{"type":"text","text":"alpha beta"}');
     insert into part values ('p-newer-a', 'm-newer-a', 'newer', 2, '{"type":"text","text":"alpha only"}');
     insert into part values ('p-newer-b', 'm-newer-b', 'newer', 3, '{"type":"text","text":"beta only"}');
+    insert into part values ('p-other', 'm-other', 'other', 3, '{"type":"text","text":"alpha blocked"}');
   `);
   database.close();
   return { directory, path };
@@ -126,6 +128,39 @@ test("V1 content search keeps independent requirements and first evidence", asyn
       limit: 10,
     });
     assert.deepEqual(sameWitness.map((hit) => hit.session.id), ["s"]);
+  } finally {
+    await store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("content requirements execute mixed all, any, none with positive-only evidence", async () => {
+  const { directory, path } = fixture();
+  const store = openOpencodeLiveStore(path);
+  const requirement = (source: string) => ({ types: ["text"] as const, text: { all: [{ source }] } });
+  try {
+    const request = {
+      selector: {},
+      requirements: {
+        all: [requirement("alpha")],
+        any: [requirement("missing"), requirement("beta")],
+        none: [requirement("blocked")],
+      },
+      evidence: true,
+      limit: 10,
+    } as const;
+    const hits = await store.searchDirect(request);
+    assert.deepEqual(hits.map((hit) => hit.session.id), ["newer", "s"]);
+    assert.deepEqual(hits.map((hit) => hit.evidenceText), ["alpha only", "alpha beta"]);
+    const withoutEvidence = await store.searchDirect({ ...request, evidence: false });
+    assert.deepEqual(withoutEvidence.map((hit) => hit.session.id), hits.map((hit) => hit.session.id));
+    assert(withoutEvidence.every((hit) => hit.evidenceText === undefined));
+
+    const anyOnly = await store.searchDirect({
+      selector: {}, requirements: { any: [requirement("missing"), requirement("alpha")] }, evidence: true, limit: 10,
+    });
+    assert.deepEqual(anyOnly.map((hit) => hit.session.id), ["newer", "other", "s"]);
+    assert.deepEqual(anyOnly.map((hit) => hit.evidenceText), ["alpha only", "alpha blocked", "alpha beta"]);
   } finally {
     await store.close();
     rmSync(directory, { recursive: true, force: true });
