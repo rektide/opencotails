@@ -10,15 +10,17 @@ The direct-query implementation is now a pnpm workspace: domain contracts live
 in [`packages/query-domain`](/packages/query-domain/src/index.ts), while the
 private Kysely/`node:sqlite` integration lives in
 [`packages/opencode-live-store`](/packages/opencode-live-store/src/index.ts).
-Title and V1 content search support executable API-level `all`/`any`/`none`;
+Title and V1/V2 content search support executable API-level `all`/`any`/`none`;
 existing positional CLI syntax remains AND-compatible and has no new boolean
-flags. V2 content normalization and history count precedence are intentionally
-not migrated because real transition data does not yet prove a safe authority
-rule. See the [implementation report](/.design/query/implementation0.md).
+flags. V2-owned sessions use `session_v2` metadata and `session_message`
+content/counts; only sessions without a V2 owner use legacy `session`, `message`,
+and `part` rows. See the [implementation report](/.design/query/implementation1.md).
 
 ## Quickstart
 
-Requires **Node.js 22+** (uses the built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module — no native bindings, no npm deps).
+Requires **Node.js 22+**. The live store uses the built-in
+[`node:sqlite`](https://nodejs.org/api/sqlite.html) module with Kysely; there are
+no third-party native bindings.
 
 ```sh
 node src/cli.ts search opencode journal     # run from a checkout
@@ -139,7 +141,10 @@ The current prototype resolves the opencode database by:
 2. Otherwise globs `~/.local/share/opencode/opencode*.db` and picks the **newest by mtime**
 3. Falls back to `~/.local/share/opencode/opencode-.db` (locally compiled build)
 
-It opens the DB **read-only** via Node's built-in `node:sqlite` (`DatabaseSync`), then runs the `EXISTS`-subquery-per-term pattern — one correlated semi-join per term, each short-circuiting on the first match:
+It opens the DB **read-only** via Node's built-in `node:sqlite` (`DatabaseSync`),
+then uses private Kysely queries with one correlated `EXISTS` semi-join per term.
+Each requirement can be witnessed independently and short-circuits on its first
+match. The conceptual V1 branch is:
 
 ```sql
 SELECT s.id, s.slug, s.title,
@@ -156,9 +161,10 @@ ORDER BY s.time_updated DESC LIMIT 50
 
 Each term is bound as a JS regex pattern and matched by a custom `re(pattern, string)` function registered with `DatabaseSync#function()`. The function compiles with the `i` flag by default (case-insensitive), or no flags under `-s`/`--case-sensitive`; compiled regexes are cached by pattern. Under `-F`/`--fixed-strings`, regex metacharacters in the term are escaped so it matches literally. The first matching part per session is surfaced as a preview snippet.
 
-### Text lives in `part.data`, not `message.data`
+### Canonical content
 
-The readable text is **not** in the `message` table — only metadata (`role`, `model`, `tokens`) lives there. The words are in the `part` table's JSON `data` column, keyed by `$.type`:
+For a legacy-owned session, readable text is in the `part` table's JSON `data`
+column rather than `message.data`:
 
 | `type` | field | what it is |
 |---|---|---|
@@ -166,9 +172,13 @@ The readable text is **not** in the `message` table — only metadata (`role`, `
 | `reasoning` | `$.text` | model chain-of-thought |
 | `tool` | `$.state.input`, `$.state.output` | tool call args and results |
 
-### V2 event fallback
-
-If the `part` table doesn't exist (V2-only databases), `cotail` falls back to searching the `event` table with the path `$.part.text` / `$.part.type`, filtered to event type `message.part.updated.1`.
+For a V2-owned session, `cotail` reads user text and assistant text/reasoning
+from `session_message`, ordered by message `seq` and assistant content-array
+position. V2 tool and shell search are rejected until a canonical searchable
+representation is selected. Legacy residue is never unioned into a V2-owned
+session, including when the native projection has zero rows. Mixed databases
+must have a completed `migration.v1-v2` marker; active or incomplete migration
+state is rejected rather than read partially.
 
 ## Planned: FTS phase
 

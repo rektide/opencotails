@@ -181,3 +181,13 @@ test("matching message IDs assigned to different sessions reject", () => {
   try { assert.throws(() => openOpencodeLiveStore(f.path), /different sessions/); }
   finally { f.close(); }
 });
+
+test("duplicate native message IDs reject", () => {
+  const f = fixture("v2");
+  session(f.db, "session_v2", "native", 1);
+  v2Message(f.db, "native", "duplicate", "user", 1, 1, { text: "one" });
+  v2Message(f.db, "native", "duplicate", "assistant", 2, 2, { content: [] });
+  f.db.close();
+  try { assert.throws(() => openOpencodeLiveStore(f.path), /duplicate session_message id/); }
+  finally { f.close(); }
+});
