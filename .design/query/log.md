@@ -1,5 +1,14 @@
 # Query Design Log
 
+## 2026-08-14
+
+- Added [`design1.md`](/query/design1.md) as the canonical one-stop working
+  design, separating product intent, normative semantics, implemented reality,
+  next capabilities, non-goals, and open index/CLI/content decisions.
+- Refocused [`README.md`](/query/README.md) and [`index.md`](/query/index.md) so
+  current guidance appears first and experiments, alternatives, implementation
+  reports, and superseded baselines remain navigable as lineage or evidence.
+
 ## 2026-08-12
 
 - Added [`implementation4.md`](/query/implementation4.md), a broad comparison of

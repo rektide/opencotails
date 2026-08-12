@@ -1,64 +1,57 @@
 # Query Design Index
 
-## Orientation
+## Start Here
 
-- [`README.md`](/query/README.md) - Current invariants and how to navigate this
-  design area.
-- [`log.md`](/query/log.md) - Chronological journal of design, review,
-  adjudication, and implementation handoffs.
-- [`packet-query-builders0.md`](/query/packet-query-builders0.md) - Canonical
-  evidence and constraints for the Kysely/Drizzle comparison.
+- [`design1.md`](/query/design1.md) - Canonical working design and recommended
+  entry point: objective, semantics, architecture, current state, next build
+  sequence, acceptance criteria, and open decisions.
+- [`README.md`](/query/README.md) - Concise scope and navigation.
 
-## Baseline
+## Current Normative Decisions
 
-- [`prompt0.gpt56sol.md`](/query/prompt0.gpt56sol.md) - Original open-ended
-  query-architecture prompt.
-- [`draft1.syn.md`](/query/draft1.syn.md) - Broad synthesis of the initial
-  alternatives and the baseline to improve upon.
-- [`draft1.gpt56sol.md`](/query/draft1.gpt56sol.md) - Independent operation-shaped
-  synthesis with the strongest mixed-layout and contract corrections.
+- [`authority0.md`](/query/authority0.md) - Normative mixed-storage authority:
+  `session_v2` ownership, completed migration state, zero-row authority, no
+  residue union, canonical content, and counts.
+- [`adjudication0.md`](/query/adjudication0.md) - Normative foundation decision:
+  private Kysely over `node:sqlite`, package direction, compatibility, runtime,
+  lifecycle, and semantic gates.
+- [`packet-query-builders0.md`](/query/packet-query-builders0.md) - Constraint and
+  evaluation packet; still useful as a review checklist, not a build plan.
 
-## Initial Alternatives
+## Implemented Reality
 
-- [`draft0.gpt56sol.md`](/query/draft0.gpt56sol.md) - Typed session-query
-  envelope.
-- [`design-alt0.ds4f.md`](/query/design-alt0.ds4f.md) - Match-first architecture
-  with relation-tagged constraints and an explicit plan.
-- [`design-alt0.glm52.md`](/query/design-alt0.glm52.md) - Selection spine and the
-  key separation of live metadata from content-search engines.
-- [`design-alt0.gpt56sol.md`](/query/design-alt0.gpt56sol.md) - Operation-shaped
-  requests and nested witness requirements.
+- [`implementation2.md`](/query/implementation2.md) - Accepted production audit
+  and final Node 22/26 evidence.
+- [`implementation1.md`](/query/implementation1.md) - Detailed owner-aware
+  completion, compatibility, fixtures, and query-plan evidence.
+- [`implementation4.md`](/query/implementation4.md) - Broad implementation
+  comparison and lineage map; evidentiary, not current design guidance.
+- [`implementation0.md`](/query/implementation0.md) - Superseded partial V1
+  implementation and justified authority stop.
 
-## Query Builder Wave
+## Architecture Lineage
 
-Artifacts are added here in order:
-
-- [`draft-ksyley0.md`](/query/draft-ksyley0.md) - Executable Kysely 0.29.x
-  proposal with a proven select-only `node:sqlite` adapter, package-enforced live
-  metadata authority, and mixed V1/V2 normalization.
+- [`draft1.syn.md`](/query/draft1.syn.md) - Superseded broad synthesis; source of
+  session-root, bounded-witness, and direct/index separation ideas.
+- [`draft1.gpt56sol.md`](/query/draft1.gpt56sol.md) - Superseded operation-shaped
+  synthesis; useful for domain vocabulary and intended FTS distinction.
+- [`draft-ksyley1.md`](/query/draft-ksyley1.md) - Superseded refined package/API
+  proposal; useful for prospective candidate hydration and lifecycle seams.
+- [`draft-ksyley0.md`](/query/draft-ksyley0.md) - Initial executable Kysely
+  alternative; experiment/reference only.
 - [`draft-drizzle0.md`](/query/draft-drizzle0.md) - Executable Drizzle
-  counterproposal: stronger schema-centered and synchronous ergonomics, but only
-  conditionally viable through a costed `better-sqlite3` driver swap.
-- [`draft-ksyley1.md`](/query/draft-ksyley1.md) - Refined Kysely architecture
-  after direct Drizzle cross-review: smaller package graph, explicit async and
-  close ownership, selected domain-shaped rows, and Kysely-owned index queries
-  with narrow SQL migrations.
-- [`adjudication0.md`](/query/adjudication0.md) - Selects refined Kysely over the
-  baseline and Drizzle, records weighted evidence and hidden gaps, and provides a
-  narrowed agent-ready implementation brief with runtime and semantic stop gates.
-- [`implementation0.md`](/query/implementation0.md) - Records the implemented
-  three-package workspace and V1 bounded query migration, plus the real-data
-  authority mismatch that stopped V2/history migration before unsafe precedence.
-- [`authority0.md`](/query/authority0.md) - Resolves the stop with source-backed
-  `session_v2` ownership, rejects cross-layout ID union, and selects separate
-  canonical content and count policies with aggregate transition evidence.
-- [`implementation1.md`](/query/implementation1.md) - Completes owner-aware V2
-  normalization, history, cleanup, minimum-Node validation, compatibility, and
-  query-plan gates for adjudication steps 8-10.
-- [`implementation2.md`](/query/implementation2.md) - Final acceptance audit:
-  closes malformed-layout, failed-open descriptor, adapter write-dispatch, and
-  characterization gaps, then reruns Node 22/26 and live-database checks.
-- [`implementation4.md`](/query/implementation4.md) - Standalone implementation
-  lineage and comparison across the hand-built reader, both executable builder
-  alternatives, the authority stop, owner-aware completion, and current hardened
-  production.
+  counterproposal; rejected under the built-in-runtime constraint.
+- [`draft0.gpt56sol.md`](/query/draft0.gpt56sol.md) - Initial typed query envelope;
+  superseded.
+- [`design-alt0.ds4f.md`](/query/design-alt0.ds4f.md) - Match-first/exported-plan
+  alternative; not selected.
+- [`design-alt0.glm52.md`](/query/design-alt0.glm52.md) - Selection-spine and live
+  metadata authority alternative; key ideas incorporated.
+- [`design-alt0.gpt56sol.md`](/query/design-alt0.gpt56sol.md) - Operation-shaped,
+  nested-witness alternative; key ideas incorporated.
+- [`prompt0.gpt56sol.md`](/query/prompt0.gpt56sol.md) - Original exploration
+  prompt; historical context only.
+
+## Journal
+
+- [`log.md`](/query/log.md) - Dated design, decision, and implementation handoffs.
