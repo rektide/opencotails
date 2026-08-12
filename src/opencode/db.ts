@@ -1,4 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -22,31 +21,4 @@ export function discoverDb(override?: string): string {
     throw new Error(`no opencode*.db found in ${dir}`);
   }
   return candidates[0].path;
-}
-
-export function openReadOnly(path: string): DatabaseSync {
-  return new DatabaseSync(path, { readOnly: true });
-}
-
-export function existingTables(db: DatabaseSync): Set<string> {
-  return new Set(
-    db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all()
-      .map((r) => (r as { name: string }).name),
-  );
-}
-
-export function registerRegex(db: DatabaseSync, caseSensitive: boolean): void {
-  const flags = caseSensitive ? "" : "i";
-  const cache = new Map<string, RegExp>();
-  db.function("re", { deterministic: true }, (pattern: string, string: unknown) => {
-    if (string == null) return 0;
-    let re = cache.get(pattern);
-    if (!re) {
-      re = new RegExp(pattern, flags);
-      cache.set(pattern, re);
-    }
-    return re.test(String(string)) ? 1 : 0;
-  });
 }

@@ -1,14 +1,5 @@
 export type PartType = "text" | "reasoning" | "tool";
 
-export interface ContentQuery {
-  patterns: string[];
-  typeFilter: PartType;
-  showSnippet: boolean;
-  limit: number;
-  directory?: string;
-  sinceMs?: number;
-}
-
 export interface SearchHit {
   id: string;
   slug: string;

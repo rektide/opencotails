@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
-import { discoverDb, openReadOnly } from "../opencode/db.ts";
-import { countActiveSessions } from "../opencode/session.ts";
+import { discoverDb } from "../opencode/db.ts";
+import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { SessionCounts } from "../opencode/types.ts";
 
 interface Args {
@@ -117,7 +117,7 @@ function renderTsv(rows: SessionCounts[]): void {
   );
 }
 
-export function run(argv: string[]): void {
+export async function run(argv: string[]): Promise<void> {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -147,17 +147,25 @@ export function run(argv: string[]): void {
     process.exit(1);
   }
 
-  const db = openReadOnly(dbPath);
+  const store = openOpencodeLiveStore(dbPath);
   try {
-    const rows = countActiveSessions(db, {
-      cutoff,
-      directory: args.directory ?? null,
+    const entries = await store.history({
+      selector: {
+        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
+        updated: { from: cutoff },
+      },
+      countSince: cutoff,
       limit: args.limit,
     });
+    const rows: SessionCounts[] = entries.map((entry) => ({
+      id: entry.id, title: entry.title, directory: entry.directory, slug: entry.slug,
+      time_created: entry.timeCreated, time_updated: entry.timeUpdated,
+      messages_total: entry.messagesTotal, messages_recent: entry.messagesRecent,
+    }));
     if (args.json) renderJson(rows);
     else if (args.tsv) renderTsv(rows);
     else renderTableOutput(rows, cutoff);
   } finally {
-    db.close();
+    await store.close();
   }
 }
