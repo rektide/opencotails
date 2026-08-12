@@ -4,8 +4,10 @@ This directory records the design evolution for cotail's session-selection,
 content-search, evidence, and storage architecture.
 
 Start with [`index.md`](/query/index.md). Kysely was selected and the initial
-query migration is complete. See [`implementation1.md`](/query/implementation1.md)
-for owner-aware V2/history semantics, fixtures, checks, and query plans;
+query migration is complete. See [`implementation2.md`](/query/implementation2.md)
+for the accepted implementation tip and final audit, and
+[`implementation1.md`](/query/implementation1.md) for owner-aware V2/history
+semantics, fixtures, checks, and query plans;
 [`implementation0.md`](/query/implementation0.md) records the earlier stop.
 
 Current invariants:

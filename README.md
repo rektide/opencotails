@@ -18,7 +18,7 @@ and `part` rows. See the [implementation report](/.design/query/implementation1.
 
 ## Quickstart
 
-Requires **Node.js 22+**. The live store uses the built-in
+Requires **Node.js 22.13+**. The live store uses the built-in
 [`node:sqlite`](https://nodejs.org/api/sqlite.html) module with Kysely; there are
 no third-party native bindings.
 
@@ -115,12 +115,12 @@ cotail get-session -C ~/src/foo      # match by directory instead of a PID
 
 Resolution order (first that applies): positional `<pid>` → `$OPENCODE_PID` →
 `$OPENCODE_SESSION_ID`. For a PID, its working directory (`/proc/<pid>/cwd`) is
-matched against the `session` table's `directory`, picking the most recently
-`time_updated` session; `$OPENCODE_DB` is read from the process env to choose
-the database. opencode never writes its active session per-process and a
+matched against the canonical owner row's `directory`, picking the most recently
+`time_updated` session from `session_v2` or the V1 fallback; `$OPENCODE_DB` is
+read from the process env to choose the database. opencode never writes its active session per-process and a
 TUI-mode process runs no HTTP listener, so the cwd+directory match is the
-reliable signal. The `session` table is shared across opencode v1 and v2, so
-this works against both. `$OPENCODE_SESSION_ID` (set by the
+reliable signal. Owner-aware resolution works against pure and migrated V1/V2
+databases. `$OPENCODE_SESSION_ID` (set by the
 [`opencode-session-id-plugin`](https://github.com/rektide/opencode-session-id-plugin)
 `shell.env` hook) short-circuits the lookup when present.
 

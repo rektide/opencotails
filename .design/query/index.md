@@ -55,3 +55,6 @@ Artifacts are added here in order:
 - [`implementation1.md`](/query/implementation1.md) - Completes owner-aware V2
   normalization, history, cleanup, minimum-Node validation, compatibility, and
   query-plan gates for adjudication steps 8-10.
+- [`implementation2.md`](/query/implementation2.md) - Final acceptance audit:
+  closes malformed-layout, failed-open descriptor, adapter write-dispatch, and
+  characterization gaps, then reruns Node 22/26 and live-database checks.

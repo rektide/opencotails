@@ -2,6 +2,11 @@
 
 ## 2026-08-11
 
+- Completed [`implementation2.md`](/query/implementation2.md), the final
+  acceptance audit. It rejects partial owner layouts, closes native handles on
+  failed opens, blocks writes through Kysely's actual adapter dispatch, restores
+  the characterization fixture, and passes 21 live-store plus 8 root tests on
+  both Node 22 and Node 26.
 - Completed adjudication steps 8-10 under the stable owner decision.
   [`implementation1.md`](/query/implementation1.md) records owner-aware V2
   content, canonical history counts, the 17-case authority suite, byte-compatible
