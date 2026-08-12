@@ -23,26 +23,28 @@ export interface OpenedOpencodeLiveStore {
   close(): Promise<void>;
 }
 
-export interface OpenStoreOptions {
-  caseSensitive?: boolean;
-}
-
-export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = {}): OpenedOpencodeLiveStore {
+export function openOpencodeLiveStore(path: string): OpenedOpencodeLiveStore {
   const native = new DatabaseSync(path, { readOnly: true });
-  const cache = new Map<string, RegExp>();
-  native.function("re", { deterministic: true }, (patternValue: SQLOutputValue, value: SQLOutputValue, sensitivity: SQLOutputValue) => {
-    const pattern = String(patternValue);
-    const caseSensitive = sensitivity === 1;
-    if (value == null) return 0;
-    const key = `${caseSensitive ? "s" : "i"}:${pattern}`;
-    let expression = cache.get(key);
-    if (expression === undefined) {
-      expression = new RegExp(pattern, caseSensitive ? "" : "i");
-      cache.set(key, expression);
-    }
-    return expression.test(String(value)) ? 1 : 0;
-  });
-  const capabilities = detectCapabilities(native);
+  let capabilities;
+  try {
+    const cache = new Map<string, RegExp>();
+    native.function("re", { deterministic: true }, (patternValue: SQLOutputValue, value: SQLOutputValue, sensitivity: SQLOutputValue) => {
+      const pattern = String(patternValue);
+      const caseSensitive = sensitivity === 1;
+      if (value == null) return 0;
+      const key = `${caseSensitive ? "s" : "i"}:${pattern}`;
+      let expression = cache.get(key);
+      if (expression === undefined) {
+        expression = new RegExp(pattern, caseSensitive ? "" : "i");
+        cache.set(key, expression);
+      }
+      return expression.test(String(value)) ? 1 : 0;
+    });
+    capabilities = detectCapabilities(native);
+  } catch (error) {
+    native.close();
+    throw error;
+  }
   const adapter = new NodeSqliteDatabase(native);
   const database = new Kysely<OpencodeDatabase>({ dialect: new SqliteDialect({ database: adapter }) });
   let closed = false;

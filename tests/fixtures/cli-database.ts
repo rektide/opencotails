@@ -30,7 +30,6 @@ export function createCliDatabase(path: string): void {
 
   const message = db.prepare("INSERT INTO message VALUES (?, ?, ?, ?)");
   message.run("m-new", "ses_newest_abcdefghijkl", 4500, "{}");
-  message.run("m-new-control", "ses_newest_abcdefghijkl", 4501, "{}");
   message.run("m-split-a", "ses_split_abcdefghijkl", 2500, "{}");
   message.run("m-split-b", "ses_split_abcdefghijkl", 3500, "{}");
   message.run("m-other", "ses_other_abcdefghijkl", 3000, "{}");

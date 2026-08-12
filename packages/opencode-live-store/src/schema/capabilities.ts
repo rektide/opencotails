@@ -28,11 +28,21 @@ export function detectCapabilities(database: DatabaseSync): Readonly<LayoutCapab
   if (tables.has("session_v2") && !hasColumns(database, "session_v2", REQUIRED_SESSION_COLUMNS)) {
     throw new Error("unsupported opencode database: session_v2 table is missing required columns");
   }
-  const v1 = tables.has("session") && tables.has("message") && tables.has("part")
+  const v1Tables = ["session", "message", "part"] as const;
+  const v2Tables = ["session_v2", "session_message"] as const;
+  const v1 = v1Tables.every((table) => tables.has(table))
     && hasColumns(database, "message", ["id", "session_id", "time_created", "data"])
     && hasColumns(database, "part", ["id", "message_id", "session_id", "time_created", "data"]);
-  const v2 = tables.has("session_v2") && tables.has("session_message")
+  const v2 = v2Tables.every((table) => tables.has(table))
     && hasColumns(database, "session_message", ["id", "session_id", "type", "seq", "time_created", "data"]);
+  if (v1Tables.some((table) => tables.has(table)) && !v1) {
+    throw new Error("unsupported opencode database: incomplete V1 layout");
+  }
+  // session_message predates session_v2 and can remain as an unused adjunct to
+  // a complete V1 layout. session_v2 is the authoritative declaration of V2.
+  if ((tables.has("session_v2") || (!v1 && tables.has("session_message"))) && !v2) {
+    throw new Error("unsupported opencode database: incomplete V2 layout");
+  }
   if (!v1 && !v2) throw new Error("unsupported opencode database: no complete V1 or V2 layout");
 
   const legacySessions = v1

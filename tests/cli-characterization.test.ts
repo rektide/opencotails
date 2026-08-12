@@ -44,11 +44,11 @@ test("content no-snippet, limit zero, fixed strings, and human output remain exa
 test("history preserves count policy and all formats", () => {
   const json = cli(["history", "--since", "1970-01-01T00:00:00Z", "--json", "--db", database]);
   assert.equal(json.status, 0);
-  assert.equal(json.stdout, '{"id":"ses_newest_abcdefghijkl","title":"Alpha Beta","directory":"/work/alpha","slug":"newest","messages_recent":2,"messages_total":2,"time_created":"1970-01-01T00:00:01.000Z","time_updated":"1970-01-01T00:00:05.000Z"}\n{"id":"ses_split_abcdefghijkl","title":"Split witnesses","directory":"/work/alpha","slug":"split","messages_recent":2,"messages_total":2,"time_created":"1970-01-01T00:00:02.000Z","time_updated":"1970-01-01T00:00:04.000Z"}\n{"id":"ses_other_abcdefghijkl","title":"Other","directory":"/work/beta","slug":"other","messages_recent":1,"messages_total":1,"time_created":"1970-01-01T00:00:03.000Z","time_updated":"1970-01-01T00:00:03.000Z"}\n');
+  assert.equal(json.stdout, '{"id":"ses_newest_abcdefghijkl","title":"Alpha Beta","directory":"/work/alpha","slug":"newest","messages_recent":1,"messages_total":1,"time_created":"1970-01-01T00:00:01.000Z","time_updated":"1970-01-01T00:00:05.000Z"}\n{"id":"ses_split_abcdefghijkl","title":"Split witnesses","directory":"/work/alpha","slug":"split","messages_recent":2,"messages_total":2,"time_created":"1970-01-01T00:00:02.000Z","time_updated":"1970-01-01T00:00:04.000Z"}\n{"id":"ses_other_abcdefghijkl","title":"Other","directory":"/work/beta","slug":"other","messages_recent":1,"messages_total":1,"time_created":"1970-01-01T00:00:03.000Z","time_updated":"1970-01-01T00:00:03.000Z"}\n');
   assert.equal(cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", "1", "--tsv", "--db", database]).stdout,
-    "id\ttitle\tdirectory\tmessages_recent\tmessages_total\ttime_updated\nses_newest_abcdefghijkl\tAlpha Beta\t/work/alpha\t2\t2\t5000\n");
+    "id\ttitle\tdirectory\tmessages_recent\tmessages_total\ttime_updated\nses_newest_abcdefghijkl\tAlpha Beta\t/work/alpha\t1\t1\t5000\n");
   assert.equal(cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", "1", "--db", database]).stdout,
-    "ID              TITLE       DIRECTORY    RECENT  TOTAL  UPDATED\nses_newest_abc  Alpha Beta  /work/alpha  2       2      1970-01-01 00:00\n1 session active since 1970-01-01 00:00 (cutoff)\n");
+    "ID              TITLE       DIRECTORY    RECENT  TOTAL  UPDATED\nses_newest_abc  Alpha Beta  /work/alpha  1       1      1970-01-01 00:00\n1 session active since 1970-01-01 00:00 (cutoff)\n");
 });
 
 test("lookup preserves id, JSONL, and not-found behavior", () => {

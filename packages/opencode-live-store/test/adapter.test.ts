@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { Kysely, SqliteDialect, sql } from "kysely";
 import { openOpencodeLiveStore } from "../src/index.ts";
 import { NodeSqliteDatabase, NodeSqliteStatement } from "../src/runtime/node-sqlite.ts";
 import { detectCapabilities } from "../src/schema/capabilities.ts";
@@ -51,8 +52,28 @@ test("adapter reads a read-only file through all and iterate and rejects run", (
 
 test("forced write reaches the select-only statement rejection", () => {
   const native = new DatabaseSync(":memory:");
-  const statement = new NodeSqliteStatement(native.prepare("create table forbidden (id text)"));
+  const statement = new NodeSqliteStatement(native.prepare("create table forbidden (id text)"), "create table forbidden (id text)");
   assert.throws(() => statement.run([]), /read-only adapter cannot run writes/);
+  native.close();
+});
+
+test("Kysely write dispatch reaches the select-only rejection", async () => {
+  const native = new DatabaseSync(":memory:");
+  const database = new Kysely<Record<string, never>>({
+    dialect: new SqliteDialect({ database: new NodeSqliteDatabase(native) }),
+  });
+  await assert.rejects(sql`create table forbidden (id text)`.execute(database), /read-only adapter cannot run writes/);
+  assert.equal(native.prepare("select count(*) as count from sqlite_master where name = 'forbidden'").get()!.count, 0);
+  await database.destroy();
+});
+
+test("data-changing CTEs do not bypass the select-only rejection", () => {
+  const native = new DatabaseSync(":memory:");
+  native.exec("create table item (id text)");
+  const statement = "with chosen as (select 'x' as id) insert into item select id from chosen returning id";
+  const prepared = new NodeSqliteStatement(native.prepare(statement), statement);
+  assert.throws(() => prepared.all([]), /read-only adapter cannot run writes/);
+  assert.equal(native.prepare("select count(*) as count from item").get()!.count, 0);
   native.close();
 });
 
@@ -62,6 +83,45 @@ test("capabilities reject missing tables and columns", () => {
   missing.exec("create table session (id text)");
   assert.throws(() => detectCapabilities(missing), /missing required columns/);
   missing.close();
+});
+
+test("capabilities reject partially present owner layouts", () => {
+  const malformedV1 = new DatabaseSync(":memory:");
+  malformedV1.exec(`
+    create table session (id text, project_id text, parent_id text, slug text,
+      directory text, title text, version text, time_created integer, time_updated integer);
+    create table message (id text, session_id text, time_created integer, data text);
+  `);
+  assert.throws(() => detectCapabilities(malformedV1), /incomplete V1 layout/);
+  malformedV1.close();
+
+  const malformedV2 = new DatabaseSync(":memory:");
+  malformedV2.exec(`
+    create table session_v2 (id text, project_id text, parent_id text, slug text,
+      directory text, title text, version text, time_created integer, time_updated integer);
+  `);
+  assert.throws(() => detectCapabilities(malformedV2), /incomplete V2 layout/);
+  malformedV2.close();
+});
+
+test("failed store opens close their native file descriptors", { skip: process.platform !== "linux" }, () => {
+  const directory = mkdtempSync(join(tmpdir(), "cotail-invalid-"));
+  const path = join(directory, "invalid.db");
+  const database = new DatabaseSync(path);
+  database.exec("create table session (id text)");
+  database.close();
+  try {
+    const descriptors = () => Array.from({ length: 4096 }, (_, fd) => {
+      try { return readlinkSync(`/proc/self/fd/${fd}`); } catch { return undefined; }
+    }).filter((target) => target === path).length;
+    assert.equal(descriptors(), 0);
+    for (let index = 0; index < 20; index++) {
+      assert.throws(() => openOpencodeLiveStore(path), /missing required columns/);
+    }
+    assert.equal(descriptors(), 0);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("store close is idempotent and operations after close fail", async () => {
