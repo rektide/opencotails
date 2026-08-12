@@ -10,6 +10,11 @@ export interface SessionTable {
   time_updated: number;
 }
 
+export interface KvTable {
+  key: string;
+  value: string;
+}
+
 export interface MessageTable {
   id: string;
   session_id: string;
@@ -36,7 +41,9 @@ export interface SessionMessageTable {
 
 export interface OpencodeDatabase {
   session: SessionTable;
+  session_v2: SessionTable;
   message: MessageTable;
   part: PartTable;
   session_message: SessionMessageTable;
+  kv: KvTable;
 }

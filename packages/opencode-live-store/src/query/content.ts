@@ -1,35 +1,45 @@
 import { validateDirectSearchRequest, type DirectSearchHit, type DirectSearchRequest } from "@opencoattails/query-domain";
 import { sql, type Expression, type Kysely, type SqlBool } from "kysely";
-import { withV1Content } from "../layout/v1.ts";
+import { v1Content } from "../layout/v1.ts";
+import { v2Content } from "../layout/v2.ts";
+import type { LayoutCapabilities } from "../schema/capabilities.ts";
 import type { OpencodeDatabase } from "../schema/tables.ts";
 import { patternSetExpression } from "./title.ts";
+import { withCanonicalSessions } from "./session-root.ts";
 
-export async function searchV1Content(database: Kysely<OpencodeDatabase>, request: DirectSearchRequest): Promise<readonly DirectSearchHit[]> {
+export async function searchContent(database: Kysely<OpencodeDatabase>, capabilities: LayoutCapabilities, request: DirectSearchRequest): Promise<readonly DirectSearchHit[]> {
   validateDirectSearchRequest(request);
   if (request.requirements === undefined || request.title !== undefined) throw new Error("content search requires content requirements only");
   const allRequirements = request.requirements.all ?? [];
   const anyRequirements = request.requirements.any ?? [];
   const noneRequirements = request.requirements.none ?? [];
-  if ([...allRequirements, ...anyRequirements, ...noneRequirements].some((requirement) => requirement.types.includes("shell"))) throw new Error("V1 shell content is unsupported");
+  const types = [...allRequirements, ...anyRequirements, ...noneRequirements].flatMap((requirement) => requirement.types);
+  if (types.includes("shell")) throw new Error("shell content search is unsupported");
+  if (capabilities.v2 && types.includes("tool")) throw new Error("V2 tool content search is unsupported");
 
-  const normalized = withV1Content(database);
-  let query = normalized.selectFrom("session").select([
-    "session.id", "session.title", "session.directory", "session.slug",
-    "session.project_id as projectId", "session.parent_id as parentId", "session.version",
-    "session.time_created as timeCreated", "session.time_updated as timeUpdated",
+  const sessions = withCanonicalSessions(database, capabilities);
+  const normalized = sessions.with("searchable_content", () => {
+    if (!capabilities.v2) return v1Content(database, false);
+    const native = v2Content(database);
+    return capabilities.v1 ? native.unionAll(v1Content(database, true)) : native;
+  });
+  let query = normalized.selectFrom("canonical_session").select([
+    "canonical_session.id", "canonical_session.title", "canonical_session.directory", "canonical_session.slug",
+    "canonical_session.project_id as projectId", "canonical_session.parent_id as parentId", "canonical_session.version",
+    "canonical_session.time_created as timeCreated", "canonical_session.time_updated as timeUpdated",
   ]);
   const selector = request.selector;
-  if (selector.ids !== undefined) query = query.where("session.id", "in", selector.ids);
-  if (selector.projectIds !== undefined) query = query.where("session.project_id", "in", selector.projectIds);
+  if (selector.ids !== undefined) query = query.where("canonical_session.id", "in", selector.ids);
+  if (selector.projectIds !== undefined) query = query.where("canonical_session.project_id", "in", selector.projectIds);
   if (selector.directory !== undefined) query = selector.directory.mode === "exact"
-    ? query.where("session.directory", "=", selector.directory.value)
-    : query.where(sql<SqlBool>`instr(session.directory, ${selector.directory.value}) > 0`);
-  if (selector.updated?.from !== undefined) query = query.where("session.time_updated", ">=", selector.updated.from);
-  if (selector.updated?.to !== undefined) query = query.where("session.time_updated", "<", selector.updated.to);
+      ? query.where("canonical_session.directory", "=", selector.directory.value)
+      : query.where(sql<SqlBool>`instr(canonical_session.directory, ${selector.directory.value}) > 0`);
+  if (selector.updated?.from !== undefined) query = query.where("canonical_session.time_updated", ">=", selector.updated.from);
+  if (selector.updated?.to !== undefined) query = query.where("canonical_session.time_updated", "<", selector.updated.to);
 
   const witnessPredicate = (alias: "unit" | "evidence", requirement: typeof allRequirements[number]): Expression<SqlBool> => {
     const groups: Expression<SqlBool>[] = [
-      sql`${sql.ref(`${alias}.session_id`)} = ${sql.ref("session.id")}`,
+      sql`${sql.ref(`${alias}.session_id`)} = ${sql.ref("canonical_session.id")}`,
       sql`(${sql.join(requirement.types.map((type) => sql`${sql.ref(`${alias}.content_type`)} = ${type}`), sql` or `)})`,
       patternSetExpression(`${alias}.text`, requirement.text),
     ];
@@ -64,7 +74,7 @@ export async function searchV1Content(database: Kysely<OpencodeDatabase>, reques
         : sql<string | null>`coalesce(${sql.join(candidates, sql`, `)})`.as("evidenceText");
     });
   }
-  const rows = await query.orderBy("session.time_updated", "desc").limit(request.limit).execute();
+  const rows = await query.orderBy("canonical_session.time_updated", "desc").limit(request.limit).execute();
   return rows.map((row) => {
     const { evidenceText, ...session } = row as typeof row & { evidenceText?: string | null };
     return { backend: "direct" as const, session, ...(evidenceText == null ? {} : { evidenceText }) };

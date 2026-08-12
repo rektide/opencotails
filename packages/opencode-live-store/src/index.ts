@@ -13,7 +13,8 @@ import { detectCapabilities } from "./schema/capabilities.ts";
 import type { OpencodeDatabase } from "./schema/tables.ts";
 import { resolveSession } from "./query/session-row.ts";
 import { searchTitles } from "./query/title.ts";
-import { searchV1Content } from "./query/content.ts";
+import { searchContent } from "./query/content.ts";
+import { readHistory } from "./query/history.ts";
 
 export interface OpenedOpencodeLiveStore {
   searchDirect(request: DirectSearchRequest): Promise<readonly DirectSearchHit[]>;
@@ -41,7 +42,7 @@ export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = 
     }
     return expression.test(String(value)) ? 1 : 0;
   });
-  detectCapabilities(native);
+  const capabilities = detectCapabilities(native);
   const adapter = new NodeSqliteDatabase(native);
   const database = new Kysely<OpencodeDatabase>({ dialect: new SqliteDialect({ database: adapter }) });
   let closed = false;
@@ -51,16 +52,16 @@ export function openOpencodeLiveStore(path: string, options: OpenStoreOptions = 
   return {
     async searchDirect(request) {
       assertOpen();
-      if (request.title !== undefined) return searchTitles(database, request);
-      return searchV1Content(database, request);
+      if (request.title !== undefined) return searchTitles(database, capabilities, request);
+      return searchContent(database, capabilities, request);
     },
-    async history(_request) {
+    async history(request) {
       assertOpen();
-      throw new Error("history not implemented");
+      return readHistory(database, capabilities, request);
     },
     async resolve(request) {
       assertOpen();
-      return resolveSession(database, request);
+      return resolveSession(database, capabilities, request);
     },
     async close() {
       if (closed) return;

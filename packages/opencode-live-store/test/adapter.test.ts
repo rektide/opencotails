@@ -58,7 +58,7 @@ test("forced write reaches the select-only statement rejection", () => {
 
 test("capabilities reject missing tables and columns", () => {
   const missing = new DatabaseSync(":memory:");
-  assert.throws(() => detectCapabilities(missing), /missing session table/);
+  assert.throws(() => detectCapabilities(missing), /no complete V1 or V2 layout/);
   missing.exec("create table session (id text)");
   assert.throws(() => detectCapabilities(missing), /missing required columns/);
   missing.close();
