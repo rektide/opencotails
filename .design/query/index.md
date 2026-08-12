@@ -58,3 +58,7 @@ Artifacts are added here in order:
 - [`implementation2.md`](/query/implementation2.md) - Final acceptance audit:
   closes malformed-layout, failed-open descriptor, adapter write-dispatch, and
   characterization gaps, then reruns Node 22/26 and live-database checks.
+- [`implementation4.md`](/query/implementation4.md) - Standalone implementation
+  lineage and comparison across the hand-built reader, both executable builder
+  alternatives, the authority stop, owner-aware completion, and current hardened
+  production.

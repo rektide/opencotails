@@ -1,5 +1,13 @@
 # Query Design Log
 
+## 2026-08-12
+
+- Added [`implementation4.md`](/query/implementation4.md), a broad comparison of
+  all materially different query implementations. It separates proposal/spike
+  evidence from shipped evidence, explains why Kysely beat Drizzle under the
+  `node:sqlite` constraint, traces the `session_v2` authority correction, and
+  assesses the post-review hardened implementation against the adjudication.
+
 ## 2026-08-11
 
 - Completed [`implementation2.md`](/query/implementation2.md), the final
