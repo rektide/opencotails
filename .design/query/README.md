@@ -3,10 +3,10 @@
 This directory records the design evolution for cotail's session-selection,
 content-search, evidence, and storage architecture.
 
-Start with [`index.md`](/query/index.md). Kysely was selected and implemented
-through V1 bounded-boolean search. See
-[`implementation0.md`](/query/implementation0.md) for the package map, checks,
-and the real transition-data stop condition blocking V2/history precedence.
+Start with [`index.md`](/query/index.md). Kysely was selected and the initial
+query migration is complete. See [`implementation1.md`](/query/implementation1.md)
+for owner-aware V2/history semantics, fixtures, checks, and query plans;
+[`implementation0.md`](/query/implementation0.md) records the earlier stop.
 
 Current invariants:
 
@@ -17,13 +17,15 @@ Current invariants:
 - content requirements have explicit witness boundaries and bounded
   `all`/`any`/`none` semantics;
 - V1 `part` and V2 `session_message` are normalized per session;
+- `session_v2` ownership selects V2 metadata/content/counts, including zero
+  native rows, while only unowned legacy sessions fall back to V1;
+- completed migration state is required before reading a mixed database;
 - SQL and query-builder mechanics remain behind operation-shaped interfaces;
 - implementation uses domain-decomposed workspace packages with explicit
   dependency direction.
 
-Current limitation: V2 normalization and history count replacement are not
-implemented. Real transition rows do not yet prove a reliable per-session
-content/count authority rule; preserving that uncertainty is required by the
-adjudication.
+Current limitations: direct scans remain unindexed, and V2 tool/shell search is
+rejected until a canonical text representation is selected. FTS, indexing,
+hydration, and new CLI boolean syntax remain deferred.
 
 Progress and handoffs are recorded in [`log.md`](/query/log.md).

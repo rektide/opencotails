@@ -52,3 +52,6 @@ Artifacts are added here in order:
 - [`authority0.md`](/query/authority0.md) - Resolves the stop with source-backed
   `session_v2` ownership, rejects cross-layout ID union, and selects separate
   canonical content and count policies with aggregate transition evidence.
+- [`implementation1.md`](/query/implementation1.md) - Completes owner-aware V2
+  normalization, history, cleanup, minimum-Node validation, compatibility, and
+  query-plan gates for adjudication steps 8-10.

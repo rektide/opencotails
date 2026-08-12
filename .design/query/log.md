@@ -2,6 +2,15 @@
 
 ## 2026-08-11
 
+- Completed adjudication steps 8-10 under the stable owner decision.
+  [`implementation1.md`](/query/implementation1.md) records owner-aware V2
+  content, canonical history counts, the 17-case authority suite, byte-compatible
+  CLI integration, Node 22 proof, real read-only commands, and non-regressing
+  representative query plans.
+- Removed the obsolete event fallback, source iteration, additive history
+  reader, and old lookup reader after all consumers moved behind the private
+  live-store operation interface. V2 tool/shell search remains rejected and
+  FTS/index/hydration remain deferred.
 - Added [`authority0.md`](/query/authority0.md) after auditing the current,
   byte-identical opencode migration/projector sources in both local archives and
   running aggregate-only analysis against the live database. The decision
