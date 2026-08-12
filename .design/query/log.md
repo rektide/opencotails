@@ -2,6 +2,14 @@
 
 ## 2026-08-11
 
+- Added [`authority0.md`](/query/authority0.md) after auditing the current,
+  byte-identical opencode migration/projector sources in both local archives and
+  running aggregate-only analysis against the live database. The decision
+  rejects ID union and message-presence precedence: completed `session_v2`
+  ownership selects canonical `session_message` content/counts, while only a
+  V1-owned session falls back to `message`/`part`. Steps 8-10 may resume under
+  mandatory zero-row, omission, revert, incomplete-migration, and sequence-gap
+  fixtures.
 - Implemented the adjudicated workspace through bounded V1 search in seven
   commits. [`implementation0.md`](/query/implementation0.md) records package
   boundaries, commit IDs, checks, and divergences.

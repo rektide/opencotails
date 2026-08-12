@@ -49,3 +49,6 @@ Artifacts are added here in order:
 - [`implementation0.md`](/query/implementation0.md) - Records the implemented
   three-package workspace and V1 bounded query migration, plus the real-data
   authority mismatch that stopped V2/history migration before unsafe precedence.
+- [`authority0.md`](/query/authority0.md) - Resolves the stop with source-backed
+  `session_v2` ownership, rejects cross-layout ID union, and selects separate
+  canonical content and count policies with aggregate transition evidence.
