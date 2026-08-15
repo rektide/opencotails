@@ -7,6 +7,10 @@ Start with [`prompt1.gpt56.md`](/query/prompt1.gpt56.md). It is the active desig
 brief for a V2-only, Kysely-forward, Effect-composed CLI and reusable query
 library. No replacement design has been accepted yet.
 
+[`design3-self.md`](/query/design3-self.md) is the first direct answer to that
+brief. It proposes an addressed logical Kysely query world and is a draft for
+evaluation, not yet an accepted design.
+
 [`design2.md`](/query/design2.md) is an unaccepted custom selector candidate now
 being challenged by the Kysely-forward direction. [`design1.md`](/query/design1.md)
 is retained only as failed/deprecated lineage.

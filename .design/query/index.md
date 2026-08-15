@@ -7,6 +7,13 @@
   an open identity/address-model challenge.
 - [`README.md`](/query/README.md) - Concise scope and navigation.
 
+## Current Design Candidate
+
+- [`design3-self.md`](/query/design3-self.md) - Direct answer to the active
+  prompt: public Kysely logical relations, Effect services, V2-only storage,
+  hierarchical Addresses, observations/evidence, multiple result grains, and
+  per-Session windows.
+
 ## Active Research
 
 - [`opencode-v2-model0.general.md`](/query/opencode-v2-model0.general.md) - Current

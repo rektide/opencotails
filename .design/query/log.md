@@ -2,6 +2,10 @@
 
 ## 2026-08-15
 
+- Added [`design3-self.md`](/query/design3-self.md), a direct answer to the active
+  prompt. It proposes a public Kysely query world over V2 logical relations,
+  Effect-managed execution, hierarchical source Addresses, revision-aware
+  observations, broad searchable documents, and multi-grain/per-Session results.
 - Added [`prompt1.gpt56.md`](/query/prompt1.gpt56.md), the active brief for a
   V2-only, Kysely-forward, Effect-composed CLI and reusable library with multiple
   result grains and an intentionally open shared identity/address model. Demoted
