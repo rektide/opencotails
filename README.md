@@ -57,6 +57,7 @@ Options:
   --db <path>      Database path (default: auto-discover)
   --limit <n>      Max results (default: 50)
   --json           Output JSONL instead of human-readable
+  --arrow          Output an Apache Arrow IPC stream
   --title-only     Search session titles only
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
@@ -70,6 +71,7 @@ Options:
 cotail search opencode journal          # sessions matching "opencode" and "journal"
 cotail search opencode 'event.*v2'      # "opencode" AND regex "event...v2"
 cotail search turso wal --json          # JSONL output
+cotail search turso wal --arrow > hits.arrow
 cotail search --title-only compaction   # search titles only
 cotail search --type reasoning memory   # search model reasoning text
 cotail search 'foo.bar' -F              # literal "foo.bar" (no regex)
@@ -96,9 +98,10 @@ cotail history --since 7d           # last week (--since accepts Nh, Nd, Nm, or 
 cotail history --directory ~/src/foo
 cotail history --json               # JSONL (one object per line)
 cotail history --tsv                # tab-separated with a header line
+cotail history --arrow > history.arrow
 ```
 
-Columns: session id, title, directory, messages in the window (`RECENT`), messages all-time (`TOTAL`), last-updated. `--json` emits ISO-8601 timestamps; `--tsv` emits epoch-ms. `--json` wins if both are given.
+Columns: session id, title, directory, messages in the window (`RECENT`), messages all-time (`TOTAL`), last-updated. `--json` emits ISO-8601 timestamps; `--tsv` emits epoch-ms. `--json` wins if both are given. `--arrow` conflicts with either text output flag.
 
 ## `cotail get-session`
 
@@ -109,6 +112,7 @@ cotail get-session                   # via $OPENCODE_PID (or $OPENCODE_SESSION_I
 cotail get-session 992039            # explicit opencode PID
 cotail get-session --id-only         # bare id, for shell capture: sid=$(cotail get-session --id-only)
 cotail get-session --json            # full session object as JSONL
+cotail get-session --arrow > session.arrow
 cotail get-session -s ses_04602d85affe...   # look up a known id directly
 cotail get-session -C ~/src/foo      # match by directory instead of a PID
 ```
@@ -130,8 +134,23 @@ Options:
   -C, --directory <dir> Override the directory to match (skip /proc lookup)
   --db <path>           Database path (default: auto-discover)
   --json                Output the full session object as JSONL
+  --arrow               Output an Apache Arrow IPC stream
   --id-only             Print only the session id (scripting-friendly)
 ```
+
+## Apache Arrow output
+
+`--arrow` is available on `search`, `history`, and `get-session`. It writes a
+binary [Apache Arrow IPC stream](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)
+to stdout for piping into Arrow-aware tools. Diagnostics remain on stderr, and
+`--arrow` cannot be combined with `--json`, `--tsv`, or `--id-only` where those
+flags apply.
+
+The three commands retain distinct schemas rather than sharing a sparse record.
+Strings use Arrow `Utf8`; counts use signed `Int64`; times use
+`Timestamp(MILLISECOND)`; and unavailable evidence or parent IDs are null. See
+the [Arrow output design](/.design/output/arrow0.gpt56.md) for complete schemas
+and experimental evidence.
 
 ## How the prototype works (direct search)
 
