@@ -1,5 +1,8 @@
 packages:
   - packages/*
 
+allowBuilds:
+  msgpackr-extract: false
+
 overrides:
   opencoattails: 'link:'
