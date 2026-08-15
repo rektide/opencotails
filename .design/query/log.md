@@ -1,5 +1,16 @@
 # Query Design Log
 
+## 2026-08-15
+
+- Added [`design2.md`](/query/design2.md) as the recommended selector and session-
+  qualification object-model adjudication, recovering the prior `draft1` cross-
+  assessment and sharpening title/content conjunction, witness scopes, stable
+  evidence IDs, backend language boundaries, and the recursive-AST threshold.
+- Deprecated [`design1.md`](/query/design1.md) as a failed, off-target synthesis
+  because it centered implementation and FTS progression rather than the query
+  scope/selector design objective; navigation now points to `design2` while
+  preserving the failed document as lineage.
+
 ## 2026-08-14
 
 - Added [`design1.md`](/query/design1.md) as the canonical one-stop working

@@ -4,7 +4,7 @@ title: Cotail query system
 description: Canonical working design for session-rooted direct and indexed query operations over OpenCode history.
 resource: /query/design1.md
 tags: [cotail, query, search, sqlite, kysely, fts, architecture]
-status: draft
+status: deprecated
 generated: { by: agent:opencode-query-design, at: 2026-08-14T00:00:00Z }
 verified: { by: source-review-and-document-checks, at: 2026-08-14T00:00:00Z }
 stale_after: 2026-11-14
@@ -30,6 +30,11 @@ sources:
 ---
 
 # Cotail Query System
+
+> **This was a failed synthesis.** It was a fuckup because it centered the
+> implementation and FTS roadmap instead of adjudicating the selector/scope
+> object-model objective. Use [`design2.md`](/query/design2.md) for the recovered
+> and sharpened session qualification and witness design.
 
 ## What Are We Building?
 

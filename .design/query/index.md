@@ -2,10 +2,20 @@
 
 ## Start Here
 
-- [`design1.md`](/query/design1.md) - Canonical working design and recommended
-  entry point: objective, semantics, architecture, current state, next build
-  sequence, acceptance criteria, and open decisions.
+- [`design2.md`](/query/design2.md) - Recommended entry point and latest
+  adjudication of the selector/qualification object model, witness scopes,
+  evidence provenance, operation boundaries, and remaining choices.
 - [`README.md`](/query/README.md) - Concise scope and navigation.
+
+## Prior Cross-Assessment
+
+- [`draft1.syn.md`](/query/draft1.syn.md) - The prior cross-assessment feeding
+  `design2`: consensus on session roots, operation-shaped requests, bounded
+  witnesses, private lowering, and honest backend separation, plus provisional
+  conclusions sharpened by the latest design.
+- [`draft1.gpt56sol.md`](/query/draft1.gpt56sol.md) - Strongest operation-shaped
+  refinement before `design2`; superseded as the recommendation but useful for
+  the narrow selector and nested witness model.
 
 ## Current Normative Decisions
 
@@ -31,10 +41,6 @@
 
 ## Architecture Lineage
 
-- [`draft1.syn.md`](/query/draft1.syn.md) - Superseded broad synthesis; source of
-  session-root, bounded-witness, and direct/index separation ideas.
-- [`draft1.gpt56sol.md`](/query/draft1.gpt56sol.md) - Superseded operation-shaped
-  synthesis; useful for domain vocabulary and intended FTS distinction.
 - [`draft-ksyley1.md`](/query/draft-ksyley1.md) - Superseded refined package/API
   proposal; useful for prospective candidate hydration and lifecycle seams.
 - [`draft-ksyley0.md`](/query/draft-ksyley0.md) - Initial executable Kysely
@@ -50,7 +56,13 @@
 - [`design-alt0.gpt56sol.md`](/query/design-alt0.gpt56sol.md) - Operation-shaped,
   nested-witness alternative; key ideas incorporated.
 - [`prompt0.gpt56sol.md`](/query/prompt0.gpt56sol.md) - Original exploration
-  prompt; historical context only.
+  prompt and foundational statement of the selector/relation/witness problem.
+
+## Failed And Deprecated
+
+- [`design1.md`](/query/design1.md) - Failed, off-target synthesis. It centered
+  implementation status and an FTS roadmap instead of the selector/scope
+  object-model objective. Retained for transparent lineage only.
 
 ## Journal
 
