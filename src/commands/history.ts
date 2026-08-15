@@ -4,6 +4,7 @@ import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
 import { discoverDb } from "../opencode/db.ts";
 import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { SessionCounts } from "../opencode/types.ts";
+import { emitHistoryArrow } from "../arrow.ts";
 
 interface Args {
   since: string;
@@ -11,6 +12,7 @@ interface Args {
   directory?: string;
   json: boolean;
   tsv: boolean;
+  arrow: boolean;
   dbPath?: string;
 }
 
@@ -26,6 +28,7 @@ function parseArgs(argv: string[]): Args {
   let directory: string | undefined;
   let json = false;
   let tsv = false;
+  let arrow = false;
   let dbPath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -51,13 +54,16 @@ function parseArgs(argv: string[]): Args {
     }
     if (a === "--json") { json = true; continue; }
     if (a === "--tsv") { tsv = true; continue; }
+    if (a === "--arrow") { arrow = true; continue; }
     if (a === "-h" || a === "--help") {
       printHelp();
       process.exit(0);
     }
     throw new Error(`unknown option: ${a}`);
   }
-  return { since, limit, directory, json, tsv, dbPath };
+  if (arrow && json) throw new Error("--arrow cannot be combined with --json");
+  if (arrow && tsv) throw new Error("--arrow cannot be combined with --tsv");
+  return { since, limit, directory, json, tsv, arrow, dbPath };
 }
 
 export function printHelp(): void {
@@ -71,6 +77,7 @@ Options:
   --directory <path> Only sessions whose directory contains <path>
   --json             Output JSONL (one object per line)
   --tsv              Output tab-separated rows with a header line
+  --arrow            Output Apache Arrow IPC stream
   --db <path>        Database path (default: auto-discover)
 
 Examples:
@@ -123,7 +130,7 @@ export async function run(argv: string[]): Promise<void> {
     args = parseArgs(argv);
   } catch (e) {
     console.error((e as Error).message);
-    printHelp();
+    if (!argv.includes("--arrow")) printHelp();
     process.exit(2);
   }
 
@@ -162,7 +169,8 @@ export async function run(argv: string[]): Promise<void> {
       time_created: entry.timeCreated, time_updated: entry.timeUpdated,
       messages_total: entry.messagesTotal, messages_recent: entry.messagesRecent,
     }));
-    if (args.json) renderJson(rows);
+    if (args.arrow) await emitHistoryArrow(rows);
+    else if (args.json) renderJson(rows);
     else if (args.tsv) renderTsv(rows);
     else renderTableOutput(rows, cutoff);
   } finally {

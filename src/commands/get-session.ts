@@ -5,6 +5,7 @@ import { discoverDb } from "../opencode/db.ts";
 import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { SessionSummary as SessionInfo } from "@opencoattails/query-domain";
 import { readProcInfo, resolvePidInput } from "../opencode/pid.ts";
+import { emitSessionArrow } from "../arrow.ts";
 
 interface Args {
   pid: string | undefined;
@@ -13,6 +14,7 @@ interface Args {
   dbPath: string | undefined;
   json: boolean;
   idOnly: boolean;
+  arrow: boolean;
 }
 
 function fmtLocal(ms: number): string {
@@ -28,6 +30,7 @@ function parseArgs(argv: string[]): Args {
   let dbPath: string | undefined;
   let json = false;
   let idOnly = false;
+  let arrow = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--db") {
@@ -46,6 +49,7 @@ function parseArgs(argv: string[]): Args {
     }
     if (a === "--json") { json = true; continue; }
     if (a === "--id-only") { idOnly = true; continue; }
+    if (a === "--arrow") { arrow = true; continue; }
     if (a === "-h" || a === "--help") {
       printHelp();
       process.exit(0);
@@ -54,7 +58,9 @@ function parseArgs(argv: string[]): Args {
     if (pid !== undefined) throw new Error(`unexpected second positional: ${a}`);
     pid = a;
   }
-  return { pid, directory, sessionId, dbPath, json, idOnly };
+  if (arrow && json) throw new Error("--arrow cannot be combined with --json");
+  if (arrow && idOnly) throw new Error("--arrow cannot be combined with --id-only");
+  return { pid, directory, sessionId, dbPath, json, idOnly, arrow };
 }
 
 export function printHelp(): void {
@@ -76,6 +82,7 @@ Options:
   --db <path>           Database path (default: auto-discover)
   --json                Output the full session object as JSONL
   --id-only             Print only the session id (scripting-friendly)
+  --arrow               Output Apache Arrow IPC stream
   -h, --help            Show this help
 
 Examples:
@@ -165,13 +172,15 @@ export async function run(argv: string[]): Promise<void> {
     args = parseArgs(argv);
   } catch (e) {
     console.error((e as Error).message);
-    printHelp();
+    if (!argv.includes("--arrow")) printHelp();
     process.exit(2);
   }
 
   try {
     const { info, via } = await resolveSession(args);
-    if (args.idOnly) {
+    if (args.arrow) {
+      await emitSessionArrow([info]);
+    } else if (args.idOnly) {
       process.stdout.write(info.id + "\n");
     } else if (args.json) {
       emitJsonl([info]);

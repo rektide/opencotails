@@ -4,12 +4,14 @@ import { C, emitJsonl } from "../format.ts";
 import { discoverDb } from "../opencode/db.ts";
 import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { PartType, SearchHit } from "../opencode/types.ts";
+import { emitSearchArrow } from "../arrow.ts";
 
 interface Args {
   terms: string[];
   dbPath?: string;
   limit: number;
   json: boolean;
+  arrow: boolean;
   titleOnly: boolean;
   showSnippet: boolean;
   typeFilter: PartType;
@@ -104,6 +106,7 @@ function parseArgs(argv: string[]): Args {
   let dbPath: string | undefined;
   let limit = 50;
   let json = false;
+  let arrow = false;
   let titleOnly = false;
   let showSnippet = true;
   let typeFilter: PartType = "text";
@@ -135,6 +138,7 @@ function parseArgs(argv: string[]): Args {
       continue;
     }
     if (a === "--json") { json = true; continue; }
+    if (a === "--arrow") { arrow = true; continue; }
     if (a === "--title-only") { titleOnly = true; continue; }
     if (a === "--no-snippet") { showSnippet = false; continue; }
     if (a === "-s" || a === "--case-sensitive") { caseSensitive = true; continue; }
@@ -154,7 +158,8 @@ function parseArgs(argv: string[]): Args {
     if (a.startsWith("--")) throw new Error(`unknown option: ${a}`);
     terms.push(a);
   }
-  return { terms, dbPath, limit, json, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
+  if (arrow && json) throw new Error("--arrow cannot be combined with --json");
+  return { terms, dbPath, limit, json, arrow, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
 }
 
 export function printHelp(): void {
@@ -167,6 +172,7 @@ Options:
   --db <path>      Database path (default: auto-discover)
   --limit <n>      Max results (default: 50)
   --json           Output JSONL instead of human-readable
+  --arrow          Output Apache Arrow IPC stream
   --title-only     Search session titles only
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
@@ -191,7 +197,7 @@ export async function run(argv: string[]): Promise<void> {
     args = parseArgs(argv);
   } catch (e) {
     console.error((e as Error).message);
-    printHelp();
+    if (!argv.includes("--arrow")) printHelp();
     process.exit(2);
   }
   if (args.terms.length === 0) {
@@ -212,6 +218,7 @@ export async function run(argv: string[]): Promise<void> {
   }
 
   const rows = args.titleOnly ? await titleRows(dbPath, args) : await contentRows(dbPath, args);
-  if (args.json) emitJsonl(rows);
+  if (args.arrow) await emitSearchArrow(rows);
+  else if (args.json) emitJsonl(rows);
   else renderHuman(rows, args.showSnippet);
 }
