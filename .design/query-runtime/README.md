@@ -4,9 +4,12 @@ This directory covers Effect-owned query runtime composition: factory descriptor
 scoped query instances, registry discovery, replacement, and lifecycle. It does
 not define relational selection or output formats.
 
-Start with [Scoped query factory registry](/.design/query-runtime/factory-registry0.gpt56.md),
-the accepted source-backed design and executable tracer for immutable registry
-construction.
+Start with [Query registry uses and alternatives](/.design/query-runtime/applications0.gpt56.md)
+for a plain-language explanation of what exists, why it is not used by production
+yet, concrete and speculative applications, adoption guidance, and alternative
+implementations. Then read
+[Scoped query factory registry](/.design/query-runtime/factory-registry0.gpt56.md)
+for the accepted technical design and executable tracer.
 
 See [the index](/.design/query-runtime/index.md) for progressive disclosure and
 [the log](/.design/query-runtime/log.md) for changes.

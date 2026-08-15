@@ -1,5 +1,11 @@
 # Query Runtime Index
 
+## Orientation
+
+- [Query registry uses and alternatives](/.design/query-runtime/applications0.gpt56.md):
+  explains current unused status, concrete and speculative applications,
+  overkill thresholds, adoption path, adaptations, and alternative designs.
+
 ## Accepted Design
 
 - [Scoped query factory registry](/.design/query-runtime/factory-registry0.gpt56.md):
