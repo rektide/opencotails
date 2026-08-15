@@ -2,6 +2,13 @@
 
 ## 2026-08-15
 
+- Added [`prompt1.gpt56.md`](/query/prompt1.gpt56.md), the active brief for a
+  V2-only, Kysely-forward, Effect-composed CLI and reusable library with multiple
+  result grains and an intentionally open shared identity/address model. Demoted
+  `design2` from recommendation to an unaccepted custom-model candidate.
+- Added [`opencode-v2-model0.general.md`](/query/opencode-v2-model0.general.md), a
+  source audit of OpenCode V2 terminology, Effect architecture, persistence,
+  extension seams, result grains, per-Session limits, and V1-removal leverage.
 - Added [`design2.md`](/query/design2.md) as the recommended selector and session-
   qualification object-model adjudication, recovering the prior `draft1` cross-
   assessment and sharpening title/content conjunction, witness scopes, stable

@@ -2,10 +2,25 @@
 
 ## Start Here
 
-- [`design2.md`](/query/design2.md) - Recommended entry point and latest
-  adjudication of the selector/qualification object model, witness scopes,
-  evidence provenance, operation boundaries, and remaining choices.
+- [`prompt1.gpt56.md`](/query/prompt1.gpt56.md) - Active design brief: V2-only,
+  Kysely-forward shared library, Effect composition, multiple result grains, and
+  an open identity/address-model challenge.
 - [`README.md`](/query/README.md) - Concise scope and navigation.
+
+## Active Research
+
+- [`opencode-v2-model0.general.md`](/query/opencode-v2-model0.general.md) - Current
+  OpenCode V2 source model, Effect architecture, integration seams, result
+  grains, logical-schema inputs, and V1-removal research.
+- [`.test-agent/query-kysely-selection/README.md`](/.test-agent/query-kysely-selection/README.md)
+  - Executable scratch evidence for Kysely expression factories, query
+  transforms, logical CTE relations, witnesses, and seeded query contexts.
+
+## Unaccepted Candidate
+
+- [`design2.md`](/query/design2.md) - Custom selector/qualification model produced
+  before the Kysely-forward direction was established. Retained to challenge and
+  mine, not recommended as the current design.
 
 ## Prior Cross-Assessment
 
@@ -17,14 +32,15 @@
   refinement before `design2`; superseded as the recommendation but useful for
   the narrow selector and nested witness model.
 
-## Current Normative Decisions
+## Prior Decisions And Constraints
 
 - [`authority0.md`](/query/authority0.md) - Normative mixed-storage authority:
   `session_v2` ownership, completed migration state, zero-row authority, no
   residue union, canonical content, and counts.
 - [`adjudication0.md`](/query/adjudication0.md) - Normative foundation decision:
   private Kysely over `node:sqlite`, package direction, compatibility, runtime,
-  lifecycle, and semantic gates.
+  lifecycle, and semantic gates. Its private-Kysely conclusion is reopened by the
+  active prompt.
 - [`packet-query-builders0.md`](/query/packet-query-builders0.md) - Constraint and
   evaluation packet; still useful as a review checklist, not a build plan.
 
