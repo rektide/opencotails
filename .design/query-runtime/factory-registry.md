@@ -1,0 +1,1 @@
+factory-registry0.gpt56.md
