@@ -143,4 +143,9 @@ test("Arrow conflicts with existing text output flags before writing stdout", ()
     assert.equal(result.stdout.length, 0);
     assert.match(result.stderr.toString(), /^--arrow cannot be combined with --/);
   }
+
+  const noTerms = cli(["search", "--arrow"]);
+  assert.equal(noTerms.status, 1);
+  assert.equal(noTerms.stdout.length, 0);
+  assert.equal(noTerms.stderr.toString(), "search requires at least one pattern\n");
 });

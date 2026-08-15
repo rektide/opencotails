@@ -201,7 +201,8 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(2);
   }
   if (args.terms.length === 0) {
-    printHelp();
+    if (args.arrow) console.error("search requires at least one pattern");
+    else printHelp();
     process.exit(1);
   }
 
