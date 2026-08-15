@@ -1,0 +1,17 @@
+{
+  "name": "@opencoattails/query-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "effect": "4.0.0-beta.101"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.87.2"
+  }
+}
