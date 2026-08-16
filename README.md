@@ -1,295 +1,273 @@
-# opencoattailss
+# opencoattails
 
-`cotail` (a play on "tail" + cute name) is like [`rg`](https://github.com/BurntTushi/ripgrep) but for opencode sessions — search and browse the session history opencode stores in its SQLite database.
+`cotail` searches and browses the session history stored by [OpenCode](https://opencode.ai/) in SQLite.
 
-opencode writes its full session history (messages, reasoning, tool calls, patches) into a single WAL-mode SQLite database with **no FTS index and no built-in search**. `cotail` reads that DB and gives you fast, scopable queries: search session content, list recent sessions, or resolve the active session for a running opencode process.
-
-> **Status:** prototype (phase 0). Commands run **direct scans** against the live opencode DB today — no index, no build step, milliseconds to a few seconds per query. An FTS-indexed phase (`index`/`status`, sub-50ms search) is planned (see [Planned: FTS phase](#planned-fts-phase)).
-
-The direct-query implementation is a pnpm workspace. The V2 logical schema,
-domain results, operations, and Kysely/`node:sqlite` source integration live in
-[`packages/query-kysely`](/packages/query-kysely/src/index.ts), with Effect-based
-query composition in [`packages/query-runtime`](/packages/query-runtime/src/index.ts).
-Production commands read `session_v2` metadata and `session_message` content and
-counts. V1-only databases are rejected, and preserved legacy rows are ignored
-after migration completes. Existing positional CLI search syntax remains
-AND-compatible.
-
-## Quickstart
-
-Requires **Node.js 22.13+**. The query source uses the built-in
-[`node:sqlite`](https://nodejs.org/api/sqlite.html) module with Kysely; there are
-no third-party native bindings.
+Use it to find sessions by content, inspect recent work, or resolve the session associated with a running OpenCode process.
 
 ```sh
-node src/cli.ts search opencode journal     # run from a checkout
-npm link                                     # put `cotail` on your PATH
+cotail search "migration" "sqlite"
 cotail history --since 7d
+cotail get-session --id-only
 ```
 
-The database is auto-discovered: `$OPENCODE_DB` if set, else the newest
-`~/.local/share/opencode/opencode*.db` by mtime.
+## Status
 
-## Commands
+The current CLI is an early `0.1.0` release with three working commands:
 
-| command | status | what it does |
-|---|---|---|
-| [`cotail search`](#cotail-search) | current | search session content (regex, AND'd terms) |
-| [`cotail history`](#cotail-history) | current | list sessions active within a time window |
-| [`cotail get-session`](#cotail-get-session) | current | resolve the active session id for an opencode PID |
-| `cotail index` | planned | build/update the FTS index |
-| `cotail status` | planned | show index coverage and freshness |
+| Command | Purpose |
+|---|---|
+| `cotail search` | Find sessions whose content matches every requested term |
+| `cotail history` | List sessions active within a time window |
+| `cotail get-session` | Resolve a Session from an ID, directory, or OpenCode process |
 
-## `cotail search`
+Queries scan OpenCode's live database directly. There is no index or build step, and no `index` or `status` command yet.
 
-Search session content. Terms are matched as **case-insensitive regular
-expressions**, AND'd together (a session must match every term). Today this is
-a `LIKE`-style scan over the live opencode DB via a JS-regex function registered
-with `node:sqlite`.
+Cotail supports OpenCode's authoritative V2 projections: `session_v2` and `session_message`. V1-only databases are rejected. Completed migrations may retain V1 tables, but those rows never affect results.
+
+## Requirements
+
+- Linux for PID-based `get-session` resolution through `/proc`
+- Node.js 22.18 or newer for direct TypeScript execution
+- pnpm for installing this workspace
+- An OpenCode database using the V2 session schema
+
+Cotail uses Node's built-in `node:sqlite`; it does not install a native SQLite binding.
+
+## Install
+
+The project is currently run from a checkout:
+
+```sh
+pnpm install
+pnpm exec cotail history --since 24h
+```
+
+You can also run the TypeScript entry point directly:
+
+```sh
+node src/cli.ts history --since 24h
+```
+
+## Database Selection
+
+Commands select a database in this order:
+
+1. The command's `--db <path>` option.
+2. The `OPENCODE_DB` environment variable.
+3. The newest `opencode*.db` file by modification time under `~/.local/share/opencode`.
+
+Every connection is opened read-only and placed in SQLite `query_only` mode.
+
+Cotail validates the required V2 tables, columns, migration state, and known Message variants before exposing a query source. Deep Message payload validation runs only when content is queried.
+
+## Search
 
 ```sh
 cotail search <pattern> [pattern...] [options]
 ```
 
-```
-Options:
-  --db <path>      Database path (default: auto-discover)
-  --limit <n>      Max results (default: 50)
-  --json           Output JSONL instead of human-readable
-  --arrow          Output an Apache Arrow IPC stream
-  --title-only     Search session titles only
-  --no-snippet     Don't show text snippet
-  --type <type>    Part type to search: text, reasoning, tool (default: text)
-  --since <dur>    Only sessions updated after cutoff (24h, 7d, 30m, or ISO date)
-  --directory <p>  Only sessions whose directory contains <p>
-  -F, --fixed-strings   Treat patterns as literal strings, not regex
-  -s, --case-sensitive  Match case sensitively (default: case-insensitive)
-```
+Every pattern is required, but different patterns may match different documents in the same Session. This makes `cotail search alpha beta` a Session-level `alpha AND beta` query.
+
+Patterns are case-insensitive JavaScript regular expressions by default. Invalid expressions fail before query execution.
 
 ```sh
-cotail search opencode journal          # sessions matching "opencode" and "journal"
-cotail search opencode 'event.*v2'      # "opencode" AND regex "event...v2"
-cotail search turso wal --json          # JSONL output
-cotail search turso wal --arrow > hits.arrow
-cotail search --title-only compaction   # search titles only
-cotail search --type reasoning memory   # search model reasoning text
-cotail search 'foo.bar' -F              # literal "foo.bar" (no regex)
-cotail search OpEnCoDe                  # case-insensitive by default
-cotail search helpers --since 7d        # only sessions updated in the last week
-cotail search helpers --directory ~/src/compfuzor   # scope by directory
+cotail search opencode journal
+cotail search 'event.*v2'
+cotail search 'foo.bar' --fixed-strings
+cotail search ERROR --case-sensitive
+cotail search compaction --title-only
+cotail search memory --type reasoning
+cotail search read_file --type tool
+cotail search helper --since 7d --directory ~/src/project
+cotail search sqlite --json
+cotail search sqlite --arrow > hits.arrow
 ```
 
-`--since` and `--directory` are **scoping predicates**: they append to the outer `WHERE`
-clause and prune candidate sessions *before* the per-session EXISTS regex subquery runs.
-On a 3.5k-session DB they cut the scan to a small subset, so scoped queries return in
-milliseconds-to-seconds rather than the multi-second cost of an unscoped scan. Same
-grammar and semantics as `cotail history`'s `--since` / `--directory`.
+### Search Options
 
-## `cotail history`
+| Option | Meaning |
+|---|---|
+| `--db <path>` | Use an explicit OpenCode database |
+| `--limit <n>` | Return at most `n` Sessions; default `50` |
+| `--json` | Emit JSON Lines |
+| `--arrow` | Emit an Apache Arrow IPC stream |
+| `--title-only` | Search Session titles instead of content |
+| `--no-snippet` | Omit evidence snippets |
+| `--type <type>` | Search `text`, `reasoning`, or `tool`; default `text` |
+| `--since <cutoff>` | Require Sessions updated at or after a duration or ISO date |
+| `--directory <path>` | Require the Session directory to contain `path` |
+| `-F`, `--fixed-strings` | Match literal substrings instead of regular expressions |
+| `-s`, `--case-sensitive` | Preserve case while matching |
 
-List sessions active within a time window — the "what was I working on recently,
-and where?" view. Reads only session/message metadata (no body scans), so it
-needs no FTS index and runs in milliseconds regardless of database size.
+`--since` accepts values such as `30m`, `24h`, `7d`, and ISO dates. Session and directory predicates are applied before evidence is collected.
+
+### Searchable Content
+
+The default `text` search covers user, synthetic, system, skill, and assistant text. Other modes cover assistant reasoning and tool names, inputs, outputs, and errors.
+
+The logical document model also represents shell output, attachment metadata, compaction text, and Session location. The current CLI does not expose a dedicated mode for every document field.
+
+Cotail does not flatten Base64 attachment bodies or opaque provider metadata into searchable text.
+
+## History
 
 ```sh
-cotail history                      # last 24h (default)
-cotail history --since 7d           # last week (--since accepts Nh, Nd, Nm, or an ISO date)
-cotail history --directory ~/src/foo
-cotail history --json               # JSONL (one object per line)
-cotail history --tsv                # tab-separated with a header line
+cotail history [options]
+```
+
+`history` lists Sessions updated at or after a cutoff. It reads Session and Message metadata without parsing Message bodies, so it remains inexpensive on large databases.
+
+```sh
+cotail history
+cotail history --since 7d
+cotail history --directory ~/src/project
+cotail history --limit 20
+cotail history --json
+cotail history --tsv
 cotail history --arrow > history.arrow
 ```
 
-Columns: session id, title, directory, messages in the window (`RECENT`), messages all-time (`TOTAL`), last-updated. `--json` emits ISO-8601 timestamps; `--tsv` emits epoch-ms. `--json` wins if both are given. `--arrow` conflicts with either text output flag.
+### History Options
 
-## `cotail get-session`
+| Option | Meaning |
+|---|---|
+| `--since <cutoff>` | Activity cutoff; default `24h` |
+| `--limit <n>` | Maximum Sessions; default is unlimited |
+| `--directory <path>` | Require the Session directory to contain `path` |
+| `--json` | Emit JSON Lines |
+| `--tsv` | Emit tab-separated rows with a header |
+| `--arrow` | Emit an Apache Arrow IPC stream |
+| `--db <path>` | Use an explicit OpenCode database |
 
-Resolve the **current active session id** for a running opencode process — answers "which session is *that* opencode instance on right now?". The foundation for a consolidated **session-information report** (the `SessionInfo` type it returns will grow as later tickets add model/cost/tokens/fork fields).
+The output distinguishes Messages created at or after the cutoff (`RECENT`) from all Messages in the Session (`TOTAL`). Both counts use only V2 `session_message` rows.
+
+## Get Session
 
 ```sh
-cotail get-session                   # via $OPENCODE_PID (or $OPENCODE_SESSION_ID)
-cotail get-session 992039            # explicit opencode PID
-cotail get-session --id-only         # bare id, for shell capture: sid=$(cotail get-session --id-only)
-cotail get-session --json            # full session object as JSONL
+cotail get-session [pid] [options]
+```
+
+`get-session` resolves one Session and prints its metadata or ID. Directory and PID lookup choose the most recently updated Session with an exact directory match.
+
+```sh
+cotail get-session -s ses_04602d85affe...
+cotail get-session -C ~/src/project
+cotail get-session 992039
+cotail get-session --id-only
+cotail get-session --json
 cotail get-session --arrow > session.arrow
-cotail get-session -s ses_04602d85affe...   # look up a known id directly
-cotail get-session -C ~/src/foo      # match by directory instead of a PID
 ```
 
-Resolution order (first that applies): positional `<pid>` → `$OPENCODE_PID` →
-`$OPENCODE_SESSION_ID`. For a PID, its working directory (`/proc/<pid>/cwd`) is
-matched against the canonical owner row's `directory`, picking the most recently
-`time_updated` session from `session_v2`; `$OPENCODE_DB` is
-read from the process env to choose the database. opencode never writes its active session per-process and a
-TUI-mode process runs no HTTP listener, so the cwd+directory match is the
-reliable signal. Cotail requires authoritative V2 projections; completed
-migrations may retain V1 tables, but those rows are ignored. `$OPENCODE_SESSION_ID` (set by the
-[`opencode-session-id-plugin`](https://github.com/rektide/opencode-session-id-plugin)
-`shell.env` hook) short-circuits the lookup when present.
+### Resolution
 
-```
-Options:
-  -s, --session <id>    Use this session id directly (skip PID resolution)
-  -C, --directory <dir> Override the directory to match (skip /proc lookup)
-  --db <path>           Database path (default: auto-discover)
-  --json                Output the full session object as JSONL
-  --arrow               Output an Apache Arrow IPC stream
-  --id-only             Print only the session id (scripting-friendly)
-```
+Resolution uses the first applicable source:
 
-## Apache Arrow output
+1. `--session <id>` performs an exact lookup.
+2. `--directory <dir>` performs an exact directory lookup.
+3. `OPENCODE_SESSION_ID` performs an exact lookup when no positional PID was supplied.
+4. A positional PID or `OPENCODE_PID` supplies `/proc/<pid>/cwd` for directory lookup.
 
-`--arrow` is available on `search`, `history`, and `get-session`. It writes a
-binary [Apache Arrow IPC stream](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)
-to stdout for piping into Arrow-aware tools. Diagnostics remain on stderr, and
-`--arrow` cannot be combined with `--json`, `--tsv`, or `--id-only` where those
-flags apply.
+When PID metadata provides `OPENCODE_DB`, that path is used for the process lookup. PID resolution is a directory-and-recency heuristic because OpenCode does not persist a process-to-Session association.
 
-The three commands retain distinct schemas rather than sharing a sparse record.
-Strings use Arrow `Utf8`; counts use signed `Int64`; times use
-`Timestamp(MILLISECOND)`; and unavailable evidence or parent IDs are null. See
-the [Arrow output design](/.design/output/arrow0.gpt56.md) for complete schemas
-and experimental evidence.
+### Get Session Options
 
-## How direct search works
+| Option | Meaning |
+|---|---|
+| `-s`, `--session <id>` | Resolve an exact Session ID |
+| `-C`, `--directory <dir>` | Resolve the latest Session for an exact directory |
+| `--db <path>` | Use an explicit OpenCode database |
+| `--json` | Emit the Session as JSON Lines |
+| `--id-only` | Print only the Session ID |
+| `--arrow` | Emit an Apache Arrow IPC stream |
 
-The current prototype resolves the opencode database by:
+## Output Formats
 
-1. `$OPENCODE_DB` env var if set
-2. Otherwise globs `~/.local/share/opencode/opencode*.db` and picks the **newest by mtime**
-3. Falls back to `~/.local/share/opencode/opencode-.db` (locally compiled build)
+Human-readable output is the default. Machine-readable formats are written to stdout; diagnostics are written to stderr.
 
-It opens the DB **read-only** via an Effect-scoped `node:sqlite` source, enables
-`PRAGMA query_only`, validates the V2 schema and Message payload model, then
-provides a public Kysely world containing logical `cotail_*` relations. Physical
-V1 tables are outside that query world.
+| Format | Search | History | Get Session |
+|---|---:|---:|---:|
+| Human | Yes | Yes | Yes |
+| JSON Lines | `--json` | `--json` | `--json` |
+| TSV | No | `--tsv` | No |
+| Arrow IPC stream | `--arrow` | `--arrow` | `--arrow` |
+| Bare ID | No | No | `--id-only` |
 
-Search normalizes source-specific text into `cotail_document` rows carrying
-Session/Message/content/tool/shell identity, source field, ordering, revision,
-and exposure. Each CLI term becomes a named contextual witness and qualifies a
-Session through its own correlated `EXISTS`; terms may therefore match different
-documents. Evidence reuses the same witness predicate and returns a checked
-Document Target, source snapshot, excerpt, and Message payload hash.
+Arrow output uses a command-specific schema rather than one sparse shared record. Strings are `Utf8`, counts are signed `Int64`, and times are millisecond timestamps.
 
-Each term is bound as a JavaScript-compatible regex by default. `-s` /
-`--case-sensitive` controls case folding; `-F` / `--fixed-strings` uses literal
-substring matching. Invalid regexes fail before execution.
+`--arrow` cannot be combined with another output format. See the [Arrow output design](/.design/output/arrow0.gpt56.md) for schema details.
 
-### Canonical content
+When both text formats are requested, `history --json --tsv` emits JSON Lines. For `get-session`, `--id-only` takes precedence over `--json`.
 
-Cotail reads only `session_v2` and `session_message`. Searchable documents cover
-user, synthetic, system, skill, assistant text/reasoning, tool names/inputs/
-outputs/errors, shell commands/outputs, attachment metadata, compaction text,
-and Session title/location. Base64 bodies and opaque provider metadata are not
-silently flattened. Message order uses `seq`; nested order uses source array
-positions. Legacy residue is never unioned, including when a V2 Session has zero
-Messages. Databases retaining legacy Sessions require a completed
-`migration.v1-v2` marker.
+## Query Architecture
 
-## Planned: FTS phase
-
-> **Not built yet.** Everything below is the target architecture for phase 1.
-> Today `search` is a direct scan (see above); `index` and `status` do not exist.
-
-The goal: a two-phase architecture — **index** opencode's content into a
-Turso FTS5 database, then **search** that index in milliseconds.
+Production commands consume a shared V2 logical query world rather than querying OpenCode's physical tables directly.
 
 ```mermaid
-graph LR
-    OC[opencode SQLite WAL db<br/>the source]
-    subgraph "cotail"
-        IDX[index phase<br/>read source, write FTS]
-        SEARCH[search phase<br/>read FTS]
-        INDEXDB[(Turso FTS index db<br/>owned by cotail)]
-    end
-    OC -->|short-lived read-only| IDX
-    IDX -->|writes| INDEXDB
-    SEARCH -->|reads| INDEXDB
+flowchart LR
+  CLI[CLI commands] --> OPS[Query operations]
+  OPS --> WORLD[Logical cotail relations]
+  WORLD --> SOURCE[Effect-scoped read-only source]
+  SOURCE --> DB[(OpenCode V2 SQLite)]
 ```
 
-Two databases, two roles:
+[`@opencoattails/query-kysely`](/packages/query-kysely/src/index.ts) provides:
 
-| database | owner | engine | pattern |
-|---|---|---|---|
-| opencode's DB (`opencode-.db`) | opencode | SQLite WAL (C library) | short-lived read-only connections |
-| cotail index DB (`~/.local/share/cotail/index.db`) | cotail | Turso (SQLite-compatible) | long-lived, read/write |
+- Source-qualified hierarchical `Address`, `Target`, and `Observation` types.
+- Logical Session, Message, content, tool, shell, attachment, compaction, and document relations.
+- Public Kysely `run`, `compile`, and SQLite query-plan operations.
+- Contextual Session predicates and alias-safe named document witnesses.
+- Checked evidence mapping, payload revisions, grouping, and deterministic limits.
+- Effect-scoped `node:sqlite` acquisition with exact-once cleanup.
 
-### Planned commands
+[`@opencoattails/query-runtime`](/packages/query-runtime/src/index.ts) provides the typed registry used to compose scoped query implementations and capabilities.
 
-```
-cotail index                           # index everything (incremental: only new/changed)
-cotail index --session <id>            # index one session
-cotail index --directory ~/src/foo     # index sessions under a directory
-cotail index --project <id>            # index sessions for a project
-cotail index --since 7d                # index sessions updated in the last 7 days
-cotail index --rebuild                 # drop and rebuild the entire index
+Searchable source payloads are projected into `cotail_document`. Each document retains its owner identity, source field, Message sequence, nested position, exposure, and revision information.
 
-cotail search "turso WAL" --json              # phrase query, JSONL output
-cotail search compaction --directory ~/src/bar  # scope to one directory's sessions
-cotail search "event sourcing" --session <id>   # scope to one session
-cotail search "tool call" --type tool           # search tool inputs/outputs only
+For the complete design, see [the V2 relational query architecture](/.design/query/design3.gpt56.md).
 
-cotail status
-# sessions indexed:  2,687 / 2,687
-# parts indexed:     575,034
-# index size:        340 MB
-# last index run:    2 hours ago
-# stale sessions:    12 (updated since last index)
+## Development
+
+Install workspace dependencies:
+
+```sh
+pnpm install
 ```
 
-Incremental indexing tracks which sessions have been indexed and their `time_updated`, so only new or changed content is re-indexed on subsequent runs.
+Run the CLI directly from TypeScript during development:
 
-### FTS index schema
-
-```sql
-CREATE TABLE indexed_session (
-    session_id   TEXT PRIMARY KEY,
-    directory    TEXT,
-    project_id   TEXT,
-    title        TEXT,
-    slug         TEXT,
-    time_updated INTEGER,          -- from opencode, for incremental indexing
-    indexed_at   INTEGER           -- when cotail last indexed this session
-);
-
-CREATE VIRTUAL TABLE parts_fts USING fts5(
-    text,
-    session_id   UNINDEXED,
-    part_id      UNINDEXED,
-    part_type    UNINDEXED,        -- text, reasoning, tool
-    time_created UNINDEXED,
-    content='parts_content',       -- external content table for space efficiency
-    tokenize = 'porter unicode61'
-);
+```sh
+pnpm exec cotail search sqlite
+pnpm exec cotail history --since 24h
 ```
 
-Search uses FTS5 `MATCH` with bm25 ranking:
+Run the quality gates:
 
-```sql
-SELECT s.title, s.slug, snippet(parts_fts, 0, '<<', '>>', '...', 20) AS excerpt,
-       bm25(parts_fts) AS rank
-FROM parts_fts
-JOIN indexed_session s ON s.session_id = parts_fts.session_id
-WHERE parts_fts MATCH 'opencode AND journal'
-  AND s.directory LIKE '~/src/opencode%'   -- scope
-ORDER BY rank
-LIMIT 20;
+```sh
+pnpm test
+pnpm exec tsgo --noEmit
+pnpm --dir packages/query-kysely check
+pnpm --dir packages/query-runtime test
 ```
 
-### Why a separate index database?
+The root tests characterize CLI text, JSONL, TSV, and Arrow output. Query package tests cover source validation, inference, relations, witnesses, evidence, limits, lifecycle, and read-only enforcement.
 
-- **Speed.** FTS5 `MATCH` is O(matches) not O(all rows). A 575k-part database goes from ~5s (LIKE scan) to <50ms (FTS lookup).
-- **No perturbation.** The index DB is owned by cotail. Reads and writes don't touch opencode's database at all.
-- **Scoping.** Metadata columns (`directory`, `project_id`, `session_id`) enable filtered searches without re-reading opencode's schema.
-- **Portability.** The index DB is a single file — copy it, move it, ship it.
-- **Turso compatibility.** Built with SQLite FTS5, readable by the `turso` Rust crate or any SQLite tool.
+Temporary experiments belong under `.test-agent/`. Design work and accepted architectural records live under `.design/`.
 
 ## Roadmap
 
-- **Phase 0 (done):** direct scan against the live opencode DB, matching terms as case-insensitive JS regex. Works, ~5s per query on a 4.8 GB database. Includes `history` (metadata-only recent activity) and `get-session` (active-session resolution).
-- **Phase 1 (next):** `cotail index` builds a Turso FTS5 index. `cotail search` queries it in milliseconds. Scopable by session, directory, project.
-- **Phase 2:** transform into an [`effect.ts`](https://effect.website) project.
+The next query-oriented work is tracked in beads rather than specified as shipped behavior in this README:
 
-## Reference
+- Complete the V2 relation map for lineage, projects, workspaces, pending input, and persisted Events.
+- Add durable bookmarks over query Targets and Observations.
+- Support hosted execution through OpenCode's Effect SQL service.
+- Build transcript, reporting, and indexed-search consumers over the shared query world.
 
-- [`/home/rektide/archive/doc/opencode-history.md`](file:///home/rektide/archive/doc/opencode-history.md) — the canonical search SQL doc with tested queries, schema details, and the schema of `session` / `message` / `part` / `event` tables.
+Inspect current work with:
+
+```sh
+bd list --status open --sort priority
+```
+
+## License
+
+MIT
