@@ -49,6 +49,25 @@ importers:
 
   packages/query-domain: {}
 
+  packages/query-kysely:
+    dependencies:
+      '@opencoattails/query-runtime':
+        specifier: workspace:*
+        version: link:../query-runtime
+      effect:
+        specifier: 4.0.0-beta.101
+        version: 4.0.0-beta.101
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260707.2
+        version: 7.0.0-dev.20260707.2
+
   packages/query-runtime:
     dependencies:
       effect:

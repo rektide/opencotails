@@ -1,0 +1,21 @@
+{
+  "name": "@opencoattails/query-kysely",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsgo -p tsconfig.json"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "private": true,
+  "dependencies": {
+    "@opencoattails/query-runtime": "workspace:*",
+    "effect": "4.0.0-beta.101",
+    "kysely": "0.29.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2"
+  }
+}
