@@ -43,7 +43,155 @@ export interface MessageRelation {
   readonly sourceJSON: string;
 }
 
+export interface UserMessageRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly text: string;
+  readonly filesJSON: string | null;
+  readonly agentsJSON: string | null;
+  readonly skillsJSON: string | null;
+  readonly metadataJSON: string | null;
+}
+
+export interface AssistantMessageRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly agent: string;
+  readonly modelID: string;
+  readonly providerID: string;
+  readonly modelVariant: string | null;
+  readonly finish: string | null;
+  readonly cost: number | null;
+  readonly tokensInput: number | null;
+  readonly tokensOutput: number | null;
+  readonly tokensReasoning: number | null;
+  readonly tokensCacheRead: number | null;
+  readonly tokensCacheWrite: number | null;
+  readonly errorType: string | null;
+  readonly errorMessage: string | null;
+  readonly errorStatus: number | null;
+  readonly retryAttempt: number | null;
+  readonly retryAt: number | null;
+  readonly retryErrorJSON: string | null;
+  readonly snapshotStart: string | null;
+  readonly snapshotEnd: string | null;
+  readonly snapshotFilesJSON: string | null;
+  readonly metadataJSON: string | null;
+  readonly createdAt: number;
+  readonly completedAt: number | null;
+}
+
+export interface ContentRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly contentIndex: number;
+  readonly contentKind: "user" | "synthetic" | "system" | "skill" | "text" | "reasoning";
+  readonly text: string;
+  readonly description: string | null;
+  readonly skillID: string | null;
+  readonly skillName: string | null;
+  readonly providerStateJSON: string | null;
+  readonly createdAt: number | null;
+  readonly completedAt: number | null;
+}
+
+export interface ToolCallRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly contentIndex: number;
+  readonly callID: string;
+  readonly toolName: string;
+  readonly state: "streaming" | "running" | "completed" | "error";
+  readonly inputJSON: string;
+  readonly executed: number | null;
+  readonly metadataJSON: string | null;
+  readonly providerStateJSON: string | null;
+  readonly providerResultStateJSON: string | null;
+  readonly errorType: string | null;
+  readonly errorMessage: string | null;
+  readonly errorStatus: number | null;
+  readonly createdAt: number;
+  readonly ranAt: number | null;
+  readonly completedAt: number | null;
+}
+
+export interface ToolResultRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly contentIndex: number;
+  readonly callID: string;
+  readonly resultIndex: number;
+  readonly resultKind: "text" | "file";
+  readonly text: string | null;
+  readonly uri: string | null;
+  readonly mime: string | null;
+  readonly name: string | null;
+}
+
+export interface ShellExecutionRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly shellID: string;
+  readonly command: string;
+  readonly status: "running" | "exited" | "timeout" | "killed";
+  readonly exit: number | null;
+  readonly output: string | null;
+  readonly outputCursor: number | null;
+  readonly outputSize: number | null;
+  readonly outputTruncated: number | null;
+  readonly metadataJSON: string | null;
+  readonly createdAt: number;
+  readonly completedAt: number | null;
+}
+
+export interface AttachmentRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly attachmentIndex: number;
+  readonly sourceIndex: number;
+  readonly attachmentType: "file" | "agent" | "skill";
+  readonly mime: string | null;
+  readonly sourceType: "inline" | "uri" | null;
+  readonly uri: string | null;
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly skillID: string | null;
+  readonly text: string | null;
+  readonly mentionStart: number | null;
+  readonly mentionEnd: number | null;
+  readonly mentionText: string | null;
+}
+
+export interface CompactionRelation {
+  readonly sessionID: string;
+  readonly messageID: string;
+  readonly messageSeq: number;
+  readonly status: "running" | "completed" | "failed";
+  readonly reason: "auto" | "manual";
+  readonly summary: string | null;
+  readonly recent: string | null;
+  readonly errorType: string | null;
+  readonly errorMessage: string | null;
+  readonly errorStatus: number | null;
+  readonly metadataJSON: string | null;
+}
+
 export interface CotailRelations {
   readonly cotail_session: SessionRelation;
   readonly cotail_message: MessageRelation;
+  readonly cotail_user_message: UserMessageRelation;
+  readonly cotail_assistant_message: AssistantMessageRelation;
+  readonly cotail_content: ContentRelation;
+  readonly cotail_tool_call: ToolCallRelation;
+  readonly cotail_tool_result: ToolResultRelation;
+  readonly cotail_shell_execution: ShellExecutionRelation;
+  readonly cotail_attachment: AttachmentRelation;
+  readonly cotail_compaction: CompactionRelation;
 }
