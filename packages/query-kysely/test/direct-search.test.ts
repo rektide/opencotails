@@ -1,0 +1,108 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { Effect } from "effect";
+import { literal } from "../src/direct/match.ts";
+import { documentWitness, witnessName } from "../src/direct/witness.ts";
+import { searchDirectSessions } from "../src/operations/direct-search.ts";
+import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
+import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+
+async function searchFixture(): Promise<{ readonly directory: string; readonly path: string }> {
+  const directory = await mkdtemp(join(tmpdir(), "cotail-search-"));
+  const path = join(directory, "source.db");
+  const fixture = openCodeV2Fixture();
+  fixture.completeMigration();
+  fixture.database.exec(`
+    insert into session_v2
+      (id, project_id, slug, directory, title, version, time_created, time_updated)
+    values
+      ('ses_a', 'prj', 'a', '/a', 'A', '2', 1, 10),
+      ('ses_b', 'prj', 'b', '/b', 'B', '2', 2, 20),
+      ('ses_c', 'prj', 'c', '/c', 'C', '2', 3, 20);
+    insert into session_message values
+      ('msg_a0', 'ses_a', 'user', 0, 1, 1, '{"text":"alpha"}'),
+      ('msg_a1', 'ses_a', 'system', 1, 2, 2, '{"text":"beta"}'),
+      ('msg_b0', 'ses_b', 'user', 0, 1, 11, '{"text":"alpha beta"}'),
+      ('msg_b1', 'ses_b', 'system', 1, 2, 12, '{"text":"alpha one"}'),
+      ('msg_b2', 'ses_b', 'synthetic', 2, 3, 13, '{"text":"alpha two"}'),
+      ('msg_c0', 'ses_c', 'user', 0, 1, 21, '{"text":"alpha"}'),
+      ('msg_c1', 'ses_c', 'system', 1, 2, 22, '{"text":"beta"}');
+  `);
+  fixture.database.prepare("vacuum into ?").run(path);
+  fixture.database.close();
+  return { directory, path };
+}
+
+const alpha = documentWitness(witnessName("alpha"), (eb) => literal(eb.ref("text"), "alpha"));
+const beta = documentWitness(witnessName("beta"), (eb) => literal(eb.ref("text"), "beta"));
+
+async function runSearch(
+  path: string,
+  options: Parameters<typeof searchDirectSessions>[1],
+) {
+  return Effect.runPromise(Effect.scoped(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+      Effect.flatMap(({ query }) => searchDirectSessions(query, options)),
+    ),
+  ));
+}
+
+test("groups independent witnesses with per-Session limits and stable evidence", async () => {
+  const fixture = await searchFixture();
+  try {
+    const result = await runSearch(fixture.path, {
+      witnesses: [alpha, beta],
+      evidence: true,
+      window: { sessions: { first: 2 }, childrenPerSession: 2 },
+    });
+    assert.deepEqual(result.map((group) => group.session.target.address.sessionID), ["ses_c", "ses_b"]);
+    assert.deepEqual(result.map((group) => group.children.length), [2, 2]);
+    assert.deepEqual(result[0]!.children.map((child) => child.witness), ["alpha", "beta"]);
+    assert.equal(result[0]!.children[0]!.document.value.field, "user.text");
+    assert.equal(result[0]!.children[0]!.document.value.excerpt, "alpha");
+    assert.equal(result[0]!.children[0]!.document.value.revision?.messageUpdatedAt, 21);
+    assert.equal(result[1]!.truncated, true);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("evidence policy preserves Session targets and keyset tie-breakers", async () => {
+  const fixture = await searchFixture();
+  try {
+    const common = { witnesses: [alpha, beta], window: { sessions: { first: 3 }, childrenPerSession: 3 } } as const;
+    const [withEvidence, withoutEvidence, after] = await Promise.all([
+      runSearch(fixture.path, { ...common, evidence: true }),
+      runSearch(fixture.path, { ...common, evidence: false }),
+      runSearch(fixture.path, {
+        witnesses: [alpha, beta],
+        evidence: true,
+        window: { sessions: { first: 2, after: { updatedAt: 20, sessionID: "ses_c" } }, childrenPerSession: 1 },
+      }),
+    ]);
+    const targets = (groups: typeof withEvidence) => groups.map((group) => group.session.target);
+    assert.deepEqual(targets(withEvidence), targets(withoutEvidence));
+    assert.ok(withoutEvidence.every((group) => group.children.length === 0));
+    assert.deepEqual(after.map((group) => group.session.value.sessionID), ["ses_b", "ses_a"]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("global hit limit follows Session-page order without dropping groups", async () => {
+  const fixture = await searchFixture();
+  try {
+    const result = await runSearch(fixture.path, {
+      witnesses: [alpha, beta],
+      evidence: true,
+      window: { sessions: { first: 3 }, childrenPerSession: 3, globalHitLimit: 2 },
+    });
+    assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_c", "ses_b", "ses_a"]);
+    assert.deepEqual(result.map((group) => group.children.length), [2, 0, 0]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
