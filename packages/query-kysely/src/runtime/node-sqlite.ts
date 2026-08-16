@@ -8,7 +8,7 @@ import { logicalWorld } from "../relations/world.ts";
 import type { PhysicalOpenCodeV2 } from "../source/contracts.ts";
 import type { SourceCapabilities } from "../source/capabilities.ts";
 import type { SourceValidationError } from "../source/errors.ts";
-import { inspectOpenCodeV2Source } from "../source/validation.ts";
+import { inspectOpenCodeV2Source, validateStoredMessagePayload } from "../source/validation.ts";
 
 export class SourceOpenError extends Schema.TaggedErrorClass<SourceOpenError>()(
   "SourceOpenError",
@@ -18,6 +18,7 @@ export class SourceOpenError extends Schema.TaggedErrorClass<SourceOpenError>()(
 export interface NodeOpenCodeSourceConfig {
   readonly path: string;
   readonly sourceID: string;
+  readonly onPayloadValidation?: (messageID: string, messageType: string) => void;
 }
 
 export interface NodeOpenCodeSource {
@@ -102,8 +103,18 @@ export class ReadonlyNodeSqliteDatabase implements SqliteDatabase {
   public closed = false;
   public readonly database: DatabaseSync;
 
-  public constructor(database: DatabaseSync) {
+  public constructor(
+    database: DatabaseSync,
+    onPayloadValidation?: (messageID: string, messageType: string) => void,
+  ) {
     this.database = database;
+    database.function("regexp", { deterministic: true }, (pattern: unknown, value: unknown, flags: unknown) =>
+      typeof pattern === "string" && typeof value === "string" && typeof flags === "string"
+        && new RegExp(pattern, `${flags}u`).test(value) ? 1 : 0);
+    database.function("cotail_validate_message", { deterministic: true }, (id, type, data) => {
+      onPayloadValidation?.(String(id), String(type));
+      return validateStoredMessagePayload(id, type, data);
+    });
   }
 
   public prepare(sql: string): SqliteStatement {
@@ -131,9 +142,7 @@ function acquire(config: NodeOpenCodeSourceConfig): Effect.Effect<AcquiredNodeSo
       try {
         native = new DatabaseSync(config.path, { readOnly: true });
         native.exec("PRAGMA query_only = ON");
-        native.function("regexp", { deterministic: true }, (pattern: unknown, value: unknown) =>
-          typeof pattern === "string" && typeof value === "string" && new RegExp(pattern, "u").test(value) ? 1 : 0);
-        const adapter = new ReadonlyNodeSqliteDatabase(native);
+        const adapter = new ReadonlyNodeSqliteDatabase(native, config.onPayloadValidation);
         const physical = new Kysely<PhysicalOpenCodeV2>({
           dialect: new SqliteDialect({ database: adapter }),
         });

@@ -8,6 +8,7 @@ import {
   MigrationIncompleteError,
   SourceSchemaError,
   inspectOpenCodeV2Source,
+  validateStoredMessagePayload,
 } from "../src/source/index.ts";
 import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
@@ -139,7 +140,7 @@ test("ignores preserved V1 message and part residue after migration", () => {
   }
 });
 
-test("rejects unknown Message variants and malformed Message JSON", () => {
+test("rejects unknown Message variants without parsing stored Message JSON", () => {
   const unknown = openCodeV2Fixture();
   const malformed = openCodeV2Fixture();
   try {
@@ -149,18 +150,14 @@ test("rejects unknown Message variants and malformed Message JSON", () => {
     assert.deepEqual(unknownError.variants, ["future-message"]);
 
     malformed.addMessage("user", "not-json");
-    const malformedError = failure(malformed.database);
-    assert(malformedError instanceof SourceSchemaError);
-    assert.equal(malformedError.reason, "malformed-message-data");
-    assert.equal(malformedError.messageType, "user");
-    assert.equal(malformedError.path, "$");
+    assert.doesNotThrow(() => inspect(malformed.database));
   } finally {
     unknown.database.close();
     malformed.database.close();
   }
 });
 
-test("rejects malformed known payloads with message identity and precise nested paths", () => {
+test("the reusable stored-payload validator reports message identity and precise nested paths", () => {
   const cases = [
     ["user", { ...validMessageData("user", "msg_bad"), files: [{ data: "%%%", mime: "text/plain", source: { type: "inline" } }] }, "$.files[0].data"],
     ["shell", { ...validMessageData("shell", "msg_bad"), output: { output: 42, cursor: 0, size: 0, truncated: false } }, "$.output.output"],
@@ -171,14 +168,25 @@ test("rejects malformed known payloads with message identity and precise nested 
         state: { status: "completed", input: {}, content: [{ type: "file", uri: "file:///x" }] },
       }],
     }, "$.content[0].state.content[0].mime"],
+    ["assistant", {
+      ...validMessageData("assistant", "msg_bad"),
+      content: [{
+        type: "tool", id: "call", name: "read", time: { created: 1, ran: "later" },
+        state: { status: "running", input: {}, metadata: {} },
+      }],
+    }, "$.content[0].time.ran"],
     ["compaction", { ...validMessageData("compaction", "msg_bad"), status: "failed", error: { type: "compact" } }, "$.error.message"],
   ] as const;
 
   for (const [type, data, path] of cases) {
     const fixture = openCodeV2Fixture();
     try {
-      fixture.addMessage(type, data, "msg_bad");
-      const error = failure(fixture.database);
+      let error: unknown;
+      try {
+        validateStoredMessagePayload("msg_bad", type, JSON.stringify(data));
+      } catch (cause) {
+        error = cause;
+      }
       assert(error instanceof SourceSchemaError);
       assert.equal(error.reason, "malformed-message-payload");
       assert.equal(error.messageID, "msg_bad");
@@ -194,9 +202,9 @@ test("reconstructs column identity before validating stored Message data", () =>
   const fixture = openCodeV2Fixture();
   try {
     fixture.addMessage("system", { text: "visible", time: { created: 1 } }, "msg_row");
-    assert.doesNotThrow(() => inspect(fixture.database));
     const stored = fixture.database.prepare("select data from session_message where id = 'msg_row'").get() as { data: string };
     assert.deepEqual(JSON.parse(stored.data), { text: "visible", time: { created: 1 } });
+    assert.equal(validateStoredMessagePayload("msg_row", "system", stored.data), stored.data);
   } finally {
     fixture.database.close();
   }

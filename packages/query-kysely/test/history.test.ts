@@ -78,3 +78,46 @@ test("orders ties deterministically, supports zero-message rows, and treats zero
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });
+
+test("acquisition and history skip payload validation while content evaluates it lazily", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cotail-lazy-validation-"));
+  const path = join(directory, "source.db");
+  const fixture = openCodeV2Fixture();
+  fixture.database.exec(`
+    insert into session_v2
+      (id, project_id, slug, directory, title, version, time_created, time_updated)
+    values ('ses_bad', 'p1', 'bad', '/bad', 'Bad', '2', 1, 1)
+  `);
+  fixture.database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)")
+    .run("msg_bad", "ses_bad", "system", 0, 1, 1, JSON.stringify({ time: { created: 1 }, text: 42 }));
+  fixture.database.prepare("vacuum into ?").run(path);
+  fixture.database.close();
+
+  let validations = 0;
+  try {
+    await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({
+        path,
+        sourceID: "fixture",
+        onPayloadValidation: () => { validations++; },
+      }).pipe(
+        Effect.flatMap(({ query }) => readSessionHistory(query, { countSince: 0, limit: 0 })
+          .pipe(Effect.tap(() => Effect.sync(() => assert.equal(validations, 0))))),
+      ),
+    ));
+    assert.equal(validations, 0);
+
+    await assert.rejects(Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({
+        path,
+        sourceID: "fixture",
+        onPayloadValidation: () => { validations++; },
+      }).pipe(
+        Effect.flatMap(({ query }) => query.run(({ db }) => db.selectFrom("cotail_document").select("documentKey"))),
+      ),
+    )), /expected string/);
+    assert.ok(validations > 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

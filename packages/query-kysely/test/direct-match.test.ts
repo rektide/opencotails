@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
+import { sql } from "kysely";
 import { literal, regex } from "../src/direct/match.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
@@ -34,7 +35,7 @@ test("direct literal and regex values remain SQL parameters", async () => {
           ])))),
       ),
     ));
-    assert.deepEqual(compiled.parameters, ["Alpha", "^Al"]);
+    assert.deepEqual(compiled.parameters, ["Alpha", "^Al", "i"]);
     assert.doesNotMatch(compiled.sql, /Alpha|\^Al/);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
@@ -44,4 +45,22 @@ test("direct literal and regex values remain SQL parameters", async () => {
 test("invalid regex fails while constructing the expression", () => {
   const text = { expressionType: undefined } as never;
   assert.throws(() => regex(text, "("), /invalid direct regular expression/);
+});
+
+test("case-insensitive regex preserves JavaScript character classes and Unicode properties", async () => {
+  const fixture = await sourceFile();
+  try {
+    const result = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+        Effect.flatMap(({ query }) => query.run(({ db }) => db.selectNoFrom((eb) => [
+          sql<number>`${regex(eb.val("A"), "\\D", { flags: "i" })}`.as("nonDigit"),
+          sql<number>`${regex(eb.val("A"), "\\S", { flags: "i" })}`.as("nonSpace"),
+          sql<number>`${regex(eb.val("É"), "\\p{Lu}", { flags: "i" })}`.as("unicodeLetter"),
+        ]))),
+      ),
+    ));
+    assert.deepEqual(result.map((row) => ({ ...row })), [{ nonDigit: 1, nonSpace: 1, unicodeLetter: 1 }]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
 });

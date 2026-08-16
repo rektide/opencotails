@@ -34,13 +34,18 @@ export function logicalWorld(
       "session_id as sessionID", "id as messageID", "type as messageType", "seq as messageSeq",
       "time_created as createdAt", "time_updated as updatedAt", "data as sourceJSON",
     ]))
+    .with("cotail_validated_message", () => sql<PhysicalOpenCodeV2["session_message"]>`(
+      select id, session_id, type, seq, time_created, time_updated,
+             cotail_validate_message(id, type, data) as data
+      from session_message
+    )`)
     .with("cotail_user_message", () => sql<UserMessageRelation>`(
       select session_id as sessionID, id as messageID, seq as messageSeq,
              json_extract(data, '$.text') as text,
              data -> '$.files' as filesJSON, data -> '$.agents' as agentsJSON,
              data -> '$.skills' as skillsJSON, data -> '$.metadata' as metadataJSON
-      from session_message
-      where type = 'user' and json_valid(data)
+      from cotail_validated_message
+      where type = 'user'
         and json_type(data, '$.text') = 'text'
         and coalesce(json_type(data, '$.files'), 'array') = 'array'
         and coalesce(json_type(data, '$.agents'), 'array') = 'array'
@@ -72,8 +77,8 @@ export function logicalWorld(
              data -> '$.metadata' as metadataJSON,
              time_created as createdAt,
              json_extract(data, '$.time.completed') as completedAt
-      from session_message
-      where type = 'assistant' and json_valid(data)
+      from cotail_validated_message
+      where type = 'assistant'
         and json_type(data, '$.agent') = 'text'
         and json_type(data, '$.model') = 'object'
         and json_type(data, '$.model.id') = 'text'
@@ -87,8 +92,8 @@ export function logicalWorld(
              json_extract(data, '$.description') as description,
              json_extract(data, '$.skill') as skillID, json_extract(data, '$.name') as skillName,
              null as providerStateJSON, null as createdAt, null as completedAt
-      from session_message
-      where type in ('user', 'synthetic', 'system', 'skill') and json_valid(data)
+      from cotail_validated_message
+      where type in ('user', 'synthetic', 'system', 'skill')
         and json_type(data, '$.text') = 'text'
         and (type != 'skill' or (json_type(data, '$.skill') = 'text' and json_type(data, '$.name') = 'text'))
       union all
@@ -96,7 +101,7 @@ export function logicalWorld(
              json_extract(item.value, '$.type'), json_extract(item.value, '$.text'),
              null, null, null, item.value -> '$.state',
              json_extract(item.value, '$.time.created'), json_extract(item.value, '$.time.completed')
-      from session_message sm, json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.content') item
+      from cotail_validated_message sm, json_each(sm.data, '$.content') item
       where sm.type = 'assistant' and json_type(sm.data, '$.content') = 'array'
         and json_extract(item.value, '$.type') in ('text', 'reasoning')
         and json_type(item.value, '$.text') = 'text'
@@ -119,7 +124,7 @@ export function logicalWorld(
              json_extract(item.value, '$.time.created') as createdAt,
              json_extract(item.value, '$.time.ran') as ranAt,
              json_extract(item.value, '$.time.completed') as completedAt
-      from session_message sm, json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.content') item
+      from cotail_validated_message sm, json_each(sm.data, '$.content') item
       where sm.type = 'assistant' and json_type(sm.data, '$.content') = 'array'
         and json_extract(item.value, '$.type') = 'tool'
         and json_type(item.value, '$.id') = 'text' and json_type(item.value, '$.name') = 'text'
@@ -150,8 +155,8 @@ export function logicalWorld(
              json_extract(result.value, '$.uri') as uri,
              json_extract(result.value, '$.mime') as mime,
              json_extract(result.value, '$.name') as name
-      from session_message sm,
-           json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.content') item,
+      from cotail_validated_message sm,
+           json_each(sm.data, '$.content') item,
            json_each(case when json_type(item.value, '$.state.content') = 'array' then item.value else '{}' end, '$.state.content') result
       where sm.type = 'assistant' and json_extract(item.value, '$.type') = 'tool'
         and json_extract(item.value, '$.state.status') in ('completed', 'error')
@@ -171,8 +176,8 @@ export function logicalWorld(
              data -> '$.metadata' as metadataJSON,
              json_extract(data, '$.time.created') as createdAt,
              json_extract(data, '$.time.completed') as completedAt
-      from session_message
-      where type = 'shell' and json_valid(data)
+      from cotail_validated_message
+      where type = 'shell'
         and json_type(data, '$.shellID') = 'text' and json_type(data, '$.command') = 'text'
         and json_extract(data, '$.status') in ('running', 'exited', 'timeout', 'killed')
         and json_type(data, '$.time.created') in ('integer', 'real')
@@ -192,7 +197,7 @@ export function logicalWorld(
              json_extract(file.value, '$.mention.start') as mentionStart,
              json_extract(file.value, '$.mention.end') as mentionEnd,
              json_extract(file.value, '$.mention.text') as mentionText
-      from session_message sm, json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.files') file
+      from cotail_validated_message sm, json_each(sm.data, '$.files') file
       where sm.type = 'user' and json_type(sm.data, '$.files') = 'array'
         and json_type(file.value, '$.data') = 'text' and json_type(file.value, '$.mime') = 'text'
         and json_extract(file.value, '$.source.type') in ('inline', 'uri')
@@ -203,7 +208,7 @@ export function logicalWorld(
              'agent', null, null, null, json_extract(agent.value, '$.name'), null, null, null,
              json_extract(agent.value, '$.mention.start'), json_extract(agent.value, '$.mention.end'),
              json_extract(agent.value, '$.mention.text')
-      from session_message sm, json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.agents') agent
+      from cotail_validated_message sm, json_each(sm.data, '$.agents') agent
       where sm.type = 'user' and json_type(sm.data, '$.agents') = 'array'
         and json_type(agent.value, '$.name') = 'text'
       union all
@@ -214,7 +219,7 @@ export function logicalWorld(
              json_extract(skill.value, '$.id'), json_extract(skill.value, '$.text'),
              json_extract(skill.value, '$.mention.start'), json_extract(skill.value, '$.mention.end'),
              json_extract(skill.value, '$.mention.text')
-      from session_message sm, json_each(case when json_valid(sm.data) then sm.data else '{}' end, '$.skills') skill
+      from cotail_validated_message sm, json_each(sm.data, '$.skills') skill
       where sm.type = 'user' and json_type(sm.data, '$.skills') = 'array'
         and json_type(skill.value, '$.id') = 'text' and json_type(skill.value, '$.name') = 'text'
         and json_type(skill.value, '$.text') = 'text'
@@ -227,8 +232,8 @@ export function logicalWorld(
              json_extract(data, '$.error.message') as errorMessage,
              json_extract(data, '$.error.status') as errorStatus,
              data -> '$.metadata' as metadataJSON
-      from session_message
-      where type = 'compaction' and json_valid(data)
+      from cotail_validated_message
+      where type = 'compaction'
         and json_extract(data, '$.status') in ('running', 'completed', 'failed')
         and json_extract(data, '$.reason') in ('auto', 'manual')
         and ((json_extract(data, '$.status') in ('running', 'completed')

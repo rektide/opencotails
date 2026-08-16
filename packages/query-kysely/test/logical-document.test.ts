@@ -22,8 +22,9 @@ function documentFixture() {
   const insert = fixture.database.prepare(
     "insert into session_message values (?, 'ses_docs', ?, ?, ?, ?, ?)",
   );
-  const message = (id: string, type: string, seq: number, data: unknown) =>
-    insert.run(id, type, seq, seq * 10, seq * 10 + 7, JSON.stringify(data));
+  const message = (id: string, type: string, seq: number, data: Record<string, unknown>) =>
+    insert.run(id, type, seq, seq * 10, seq * 10 + 7,
+      JSON.stringify({ ...data, time: data.time ?? { created: seq * 10 } }));
 
   message("msg_agent", "agent-switched", 1, { agent: "switch-only-agent" });
   message("msg_model", "model-switched", 2, {
@@ -73,18 +74,11 @@ function documentFixture() {
         type: "tool", id: "call-stream", name: "grep",
         state: { status: "streaming", input: "{\"unfinished\":" }, time: { created: 75 },
       },
-      {
-        type: "tool", id: "call-malformed", name: "bad",
-        state: {
-          status: "completed", input: { leak: "MALFORMED_SECRET" },
-          content: [{ type: "text", text: "misleading malformed output" }],
-        },
-      },
     ],
     metadata: { opaqueAssistant: "ASSISTANT_SECRET" }, time: { created: 70, completed: 79 },
   });
   message("msg_shell", "shell", 8, {
-    shellID: "sh-docs", command: "printf shell", status: "exited", exit: 0,
+    shellID: "sh_docs", command: "printf shell", status: "exited", exit: 0,
     output: { output: "shell output", cursor: 12, size: 12, truncated: false },
     metadata: { opaqueShell: "SHELL_SECRET" }, time: { created: 80, completed: 81 },
   });
@@ -95,11 +89,6 @@ function documentFixture() {
   message("msg_compaction_error", "compaction", 10, {
     status: "failed", reason: "auto", error: { type: "compact", message: "compact error" },
   });
-  message("msg_bad_shell", "shell", 11, {
-    shellID: "sh-bad", command: "misleading command", status: "exited",
-    output: { output: 42, cursor: 1, size: 1, truncated: false }, time: { created: 110 },
-  });
-
   const adapter = new ReadonlyNodeSqliteDatabase(fixture.database);
   const physical = new Kysely<PhysicalOpenCodeV2>({ dialect: new SqliteDialect({ database: adapter }) });
   return { adapter, db: logicalWorld(physical) };
@@ -191,11 +180,8 @@ test("does not invent switch documents or leak Base64 and opaque metadata", asyn
       "switch-only-agent", "switch-only-model", "switch-only-provider", "previous-only-model",
       "QkFTRTY0X1NFQ1JFVA==", "SESSION_SECRET", "USER_SECRET", "PROVIDER_SECRET",
       "TOOL_PROVIDER_SECRET", "TOOL_METADATA_SECRET", "SHELL_SECRET", "COMPACTION_SECRET",
-      "MALFORMED_SECRET", "misleading malformed output", "misleading command",
     ]) assert.equal(searchable.includes(excluded), false, excluded);
     assert.equal(documents.some((row) => row.messageID === "msg_agent" || row.messageID === "msg_model"), false);
-    assert.equal(documents.some((row) => row.messageID === "msg_bad_shell"), false);
-    assert.equal(documents.some((row) => row.nativeID === "call-malformed"), false);
   } finally {
     adapter.close();
   }

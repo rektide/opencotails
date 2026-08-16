@@ -72,7 +72,7 @@ test("groups independent witnesses with per-Session limits and stable evidence",
     assert.equal(evidence[0]!.document.revision?.messageUpdatedAt, 21);
     assert.match(evidence[0]!.document.revision?.payloadHash ?? "", /^[a-f0-9]{64}$/);
     assert.equal(evidence[0]!.document.revision?.payloadHash, createHash("sha256")
-      .update('{"text":"alpha","time":{"created":1}}').digest("hex"));
+      .update('{"id":"msg_c0","text":"alpha","time":{"created":1},"type":"user"}').digest("hex"));
     assert.notEqual(evidence[0]!.document.revision?.payloadHash, JSON.stringify(evidence[0]!.document.target.address));
     assert.ok(Number.isSafeInteger(evidence[0]!.document.observedAt));
     assert.equal(new Set(evidence.map((child) => child.document.observedAt)).size, 1);
@@ -134,6 +134,7 @@ test("global hit limit follows Session-page order without dropping groups", asyn
     });
     assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_c", "ses_b", "ses_a"]);
     assert.deepEqual(result.map((group) => group.children.length), [2, 0, 0]);
+    assert.deepEqual(result.map((group) => group.truncated), [false, true, true]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

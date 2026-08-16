@@ -47,6 +47,7 @@ interface SearchRow extends DocumentRelation {
   readonly sessionRank: number | null;
   readonly sessionTotal: number | null;
   readonly sourceJSON: string | null;
+  readonly messageType: string | null;
 }
 
 const documentColumns = [
@@ -88,8 +89,9 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function payloadHash(sourceJSON: string): string {
-  return createHash("sha256").update(canonical(JSON.parse(sourceJSON))).digest("hex");
+function payloadHash(sourceJSON: string, messageID: string, messageType: string): string {
+  const data = JSON.parse(sourceJSON) as Record<string, unknown>;
+  return createHash("sha256").update(canonical({ ...data, id: messageID, type: messageType })).digest("hex");
 }
 
 function decodeRows(
@@ -101,7 +103,8 @@ function decodeRows(
   const groups = new Map<string, {
     session: GroupedSession<DirectEvidence>["session"];
     children: DirectEvidence[];
-    truncated: boolean;
+    total: number;
+    returned: number;
   }>();
   const excerptLength = request.excerptLength ?? 240;
 
@@ -122,18 +125,21 @@ function decodeRows(
       group = {
         session: Object.freeze({ target: target(sourceKey(row.sourceID), sessionAddress(sid)), value: summary }),
         children: [],
-        truncated: (row.sessionTotal ?? 0) > request.window.childrenPerSession,
+        total: row.sessionTotal ?? 0,
+        returned: 0,
       };
       groups.set(row.sessionID, group);
     }
-    if (!request.evidence || row.witnessName === null || row.sessionRank === null) continue;
+    if (row.witnessName === null || row.sessionRank === null) continue;
+    group.returned++;
+    if (!request.evidence) continue;
     const documentTarget = mapDocumentTarget(sourceKey(row.sourceID), row);
-    if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON === null)) {
+    if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON === null || row.messageType === null)) {
       throw new RowDecodeError("Message-owned evidence has no source revision", row.documentKey);
     }
     const revision = row.messageID === null
       ? undefined
-      : projectionRevision(row.messageUpdatedAt!, payloadHash(row.sourceJSON!));
+      : projectionRevision(row.messageUpdatedAt!, payloadHash(row.sourceJSON!, row.messageID, row.messageType!));
     group.children.push(Object.freeze({
       kind: "direct",
       witness: row.witnessName as WitnessName,
@@ -153,7 +159,7 @@ function decodeRows(
   return Object.freeze([...groups.values()].map((group) => Object.freeze({
     session: group.session,
     children: Object.freeze(group.children),
-    truncated: group.truncated,
+    truncated: group.total > group.returned,
   })));
 }
 
@@ -220,6 +226,7 @@ export function searchDirectSessions(
           "qualified_sessions.sessionUpdatedAt",
           "qualified_sessions.sourceID",
           "evidence_message.sourceJSON",
+          "evidence_message.messageType",
           sql<string>`${witness.name}`.as("witnessName"),
           sql<number>`${witnessOrder}`.as("witnessOrder"),
         ]);
@@ -240,6 +247,10 @@ export function searchDirectSessions(
         )`.as("sessionRank"),
         sql<number>`count(*) over (partition by ${sql.ref("sessionID")})`.as("sessionTotal"),
       ]))
+    .with("session_totals", (qb) => qb.selectFrom("ranked_documents")
+      .select("sessionID")
+      .select((eb) => eb.fn.max("sessionTotal").as("sessionTotal"))
+      .groupBy("sessionID"))
     .with("session_hits", (qb) => {
       let hits = qb.selectFrom("ranked_documents")
         .where("sessionRank", "<=", request.window.childrenPerSession)
@@ -254,6 +265,7 @@ export function searchDirectSessions(
     })
     .selectFrom("qualified_sessions")
     .leftJoin("session_hits", "session_hits.sessionID", "qualified_sessions.sessionID")
+    .leftJoin("session_totals", "session_totals.sessionID", "qualified_sessions.sessionID")
     .select([
       "qualified_sessions.sourceID",
       "qualified_sessions.sessionID",
@@ -268,8 +280,9 @@ export function searchDirectSessions(
       "session_hits.witnessName",
       "session_hits.witnessOrder",
       "session_hits.sessionRank",
-      "session_hits.sessionTotal",
+      "session_totals.sessionTotal",
       "session_hits.sourceJSON",
+      "session_hits.messageType",
     ])
     .orderBy("qualified_sessions.sessionUpdatedAt", "desc")
     .orderBy("qualified_sessions.sessionID", "desc")

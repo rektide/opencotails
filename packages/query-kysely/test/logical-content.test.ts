@@ -105,11 +105,6 @@ function contentFixture() {
     status: "failed", reason: "auto", error: { type: "compact", message: "too large", status: 500 },
     time: { created: 900 },
   });
-  message("msg_bad_shell", "shell", 120, {
-    shellID: "sh_bad", command: "bad", status: "exited",
-    output: { output: 42, cursor: 1, size: 1, truncated: false }, time: { created: 1200 },
-  });
-
   const adapter = new ReadonlyNodeSqliteDatabase(fixture.database);
   const physical = new Kysely<PhysicalOpenCodeV2>({ dialect: new SqliteDialect({ database: adapter }) });
   return { fixture, adapter, db: logicalWorld(physical) };
@@ -126,7 +121,7 @@ test("projects every V2 Message variant with source identity and sparse ordering
       ["msg_synthetic", "synthetic", 13], ["msg_system", "system", 14], ["msg_skill", "skill", 21],
       ["msg_shell", "shell", 34], ["msg_assistant", "assistant", 55],
       ["msg_compaction_running", "compaction", 70], ["msg_compaction_completed", "compaction", 89],
-      ["msg_compaction_failed", "compaction", 90], ["msg_bad_shell", "shell", 120],
+      ["msg_compaction_failed", "compaction", 90],
     ]);
     assert.equal(messages[2]?.createdAt, 80);
     assert.equal(messages[2]?.updatedAt, 81);
@@ -218,7 +213,7 @@ test("projects assistant metadata, tool states, and nested result identities", a
   }
 });
 
-test("projects shell and compaction fields and suppresses malformed semantic rows", async () => {
+test("projects validated shell and compaction fields", async () => {
   const { adapter, db } = contentFixture();
   try {
     const shells = await db.selectFrom("cotail_shell_execution").selectAll().execute();
@@ -242,11 +237,6 @@ test("projects shell and compaction fields and suppresses malformed semantic row
     assert.equal(compactions[0]?.summary, "summary running");
     assert.equal(compactions[1]?.recent, "recent complete");
     assert.equal(compactions[2]?.errorMessage, "too large");
-
-    const malformedBase = await db.selectFrom("cotail_message").select("messageID")
-      .where("messageID", "=", "msg_bad_shell").executeTakeFirst();
-    assert.equal(malformedBase?.messageID, "msg_bad_shell");
-    assert.equal(shells.some((row) => row.messageID === "msg_bad_shell"), false);
   } finally {
     adapter.close();
   }

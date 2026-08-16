@@ -41,9 +41,5 @@ export function regex(
   } catch (cause) {
     throw new InvalidDirectPatternError(source, flags, cause);
   }
-  // The registered SQLite regexp function uses JavaScript's Unicode regexp
-  // grammar. Case folding both operands supplies its supported `i` policy.
-  return flags === "i"
-    ? sql<SqlBool>`regexp(lower(${source}), lower(${text}))`
-    : sql<SqlBool>`regexp(${source}, ${text})`;
+  return sql<SqlBool>`regexp(${source}, ${text}, ${flags})`;
 }

@@ -31,7 +31,7 @@ test("opens read-only, registers regexp, rejects writes, and closes exactly once
         Effect.tap((source) => Effect.sync(() => { retained = source; })),
         Effect.flatMap((source) => Effect.all({
           regex: source.query.run(({ db }) => db.selectNoFrom((eb) => [
-            eb.fn("regexp", [eb.val("^Al"), eb.val("Alpha")]).as("matched"),
+            eb.fn("regexp", [eb.val("^Al"), eb.val("Alpha"), eb.val("")]).as("matched"),
           ])),
           write: source.query.run(() => ({
             compile: () => ({ sql: "insert into kv values ('x', 'x', 0, 0)", parameters: [] }),

@@ -44,12 +44,6 @@ interface TypeRow {
   readonly type: unknown;
 }
 
-interface MessageRow {
-  readonly id: unknown;
-  readonly type: unknown;
-  readonly data: unknown;
-}
-
 function schemaError(
   reason: SourceSchemaError["reason"],
   message: string,
@@ -131,6 +125,7 @@ function validateTool(value: Record<string, unknown>, path: string): void {
   optional(value.providerState, object, `${path}.providerState`, "object");
   optional(value.providerResultState, object, `${path}.providerResultState`, "object");
   validateTime(value.time, `${path}.time`, true);
+  optional((value.time as Record<string, unknown>).ran, finite, `${path}.time.ran`, "finite number");
   requireAt(object(value.state), `${path}.state`, "expected object");
   const state = value.state;
   requireAt(["streaming", "running", "completed", "error"].includes(String(state.status)),
@@ -180,7 +175,7 @@ function validateUser(value: Record<string, unknown>): void {
   }
 }
 
-function validatePayload(id: string, type: string, value: unknown): void {
+export function validateMessagePayload(id: string, type: string, value: unknown): void {
   requireAt(id.startsWith("msg_"), "$.id", "expected msg_ ID");
   requireAt(object(value), "$", "expected object");
   requireAt(value.id === id, "$.id", `expected ${id}`);
@@ -271,6 +266,29 @@ function validatePayload(id: string, type: string, value: unknown): void {
   }
 }
 
+export function validateStoredMessagePayload(id: unknown, type: unknown, data: unknown): string {
+  const messageID = String(id);
+  const messageType = String(type);
+  try {
+    const sourceJSON = String(data);
+    const decoded: unknown = JSON.parse(sourceJSON);
+    requireAt(object(decoded), "$", "expected object");
+    validateMessagePayload(messageID, messageType, { ...decoded, id: messageID, type: messageType });
+    return sourceJSON;
+  } catch (cause) {
+    const issue = cause instanceof PayloadIssue ? cause : new PayloadIssue("$", String(cause));
+    throw new SourceSchemaError({
+      reason: "malformed-message-payload",
+      message: issue.message,
+      table: "session_message",
+      missingColumns: [],
+      messageID,
+      messageType,
+      path: issue.path,
+    });
+  }
+}
+
 function inspect(database: DatabaseSync): Effect.Effect<SourceCapabilities, SourceValidationError> {
   return Effect.gen(function* () {
     const tables = new Set(
@@ -338,46 +356,11 @@ function inspect(database: DatabaseSync): Effect.Effect<SourceCapabilities, Sour
       }
     }
 
-    const malformed = database.prepare(
-      "select id, type, data from session_message where not json_valid(data) or json_type(data) <> 'object' order by seq, id limit 1",
-    ).get() as unknown as MessageRow | undefined;
-    if (malformed !== undefined) {
-      return yield* Effect.fail(new SourceSchemaError({
-        reason: "malformed-message-data",
-        message: "session_message data must be a JSON object",
-        table: "session_message",
-        missingColumns: [],
-        messageID: String(malformed.id),
-        messageType: String(malformed.type),
-        path: "$",
-      }));
-    }
-
     const observedTypes = database.prepare("select distinct type from session_message").all()
       .map((row) => String((row as unknown as TypeRow).type));
     const unknownTypes = observedTypes.filter((type) => !CURRENT_MESSAGE_VARIANTS.has(type as MessageVariant)).sort();
     if (unknownTypes.length > 0) {
       return yield* Effect.fail(new IncompleteContentModelError({ variants: unknownTypes }));
-    }
-
-    for (const row of database.prepare("select id, type, data from session_message order by seq, id").all() as unknown as MessageRow[]) {
-      const messageID = String(row.id);
-      const messageType = String(row.type);
-      try {
-        const data = JSON.parse(String(row.data)) as Record<string, unknown>;
-        validatePayload(messageID, messageType, { ...data, id: messageID, type: messageType });
-      } catch (cause) {
-        const issue = cause instanceof PayloadIssue ? cause : new PayloadIssue("$", String(cause));
-        return yield* Effect.fail(new SourceSchemaError({
-          reason: "malformed-message-payload",
-          message: issue.message,
-          table: "session_message",
-          missingColumns: [],
-          messageID,
-          messageType,
-          path: issue.path,
-        }));
-      }
     }
 
     const eventRows: EventRowsCapability = hasEvent && Number(
