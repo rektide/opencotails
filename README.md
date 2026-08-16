@@ -119,11 +119,11 @@ cotail get-session -C ~/src/foo      # match by directory instead of a PID
 Resolution order (first that applies): positional `<pid>` → `$OPENCODE_PID` →
 `$OPENCODE_SESSION_ID`. For a PID, its working directory (`/proc/<pid>/cwd`) is
 matched against the canonical owner row's `directory`, picking the most recently
-`time_updated` session from `session_v2` or the V1 fallback; `$OPENCODE_DB` is
+`time_updated` session from `session_v2`; `$OPENCODE_DB` is
 read from the process env to choose the database. opencode never writes its active session per-process and a
 TUI-mode process runs no HTTP listener, so the cwd+directory match is the
-reliable signal. Owner-aware resolution works against pure and migrated V1/V2
-databases. `$OPENCODE_SESSION_ID` (set by the
+reliable signal. Cotail requires authoritative V2 projections; completed
+migrations may retain V1 tables, but those rows are ignored. `$OPENCODE_SESSION_ID` (set by the
 [`opencode-session-id-plugin`](https://github.com/rektide/opencode-session-id-plugin)
 `shell.env` hook) short-circuits the lookup when present.
 
@@ -151,7 +151,7 @@ Strings use Arrow `Utf8`; counts use signed `Int64`; times use
 the [Arrow output design](/.design/output/arrow0.gpt56.md) for complete schemas
 and experimental evidence.
 
-## How the prototype works (direct search)
+## How direct search works
 
 The current prototype resolves the opencode database by:
 
@@ -159,44 +159,32 @@ The current prototype resolves the opencode database by:
 2. Otherwise globs `~/.local/share/opencode/opencode*.db` and picks the **newest by mtime**
 3. Falls back to `~/.local/share/opencode/opencode-.db` (locally compiled build)
 
-It opens the DB **read-only** via Node's built-in `node:sqlite` (`DatabaseSync`),
-then uses private Kysely queries with one correlated `EXISTS` semi-join per term.
-Each requirement can be witnessed independently and short-circuits on its first
-match. The conceptual V1 branch is:
+It opens the DB **read-only** via an Effect-scoped `node:sqlite` source, enables
+`PRAGMA query_only`, validates the V2 schema and Message payload model, then
+provides a public Kysely world containing logical `cotail_*` relations. Physical
+V1 tables are outside that query world.
 
-```sql
-SELECT s.id, s.slug, s.title,
-       datetime(s.time_updated/1000,'unixepoch') AS updated,
-       substr((SELECT json_extract(p.data, '$.text') ... ), 1, 200) AS snippet
-FROM session s
-WHERE EXISTS (SELECT 1 FROM part p
-              WHERE p.session_id = s.id
-                AND json_extract(p.data, '$.type') = 'text'
-                AND re(?, json_extract(p.data, '$.text')))
-  AND EXISTS (...)   -- one per term
-ORDER BY s.time_updated DESC LIMIT 50
-```
+Search normalizes source-specific text into `cotail_document` rows carrying
+Session/Message/content/tool/shell identity, source field, ordering, revision,
+and exposure. Each CLI term becomes a named contextual witness and qualifies a
+Session through its own correlated `EXISTS`; terms may therefore match different
+documents. Evidence reuses the same witness predicate and returns a checked
+Document Target, source snapshot, excerpt, and Message payload hash.
 
-Each term is bound as a JS regex pattern and matched by a custom `re(pattern, string)` function registered with `DatabaseSync#function()`. The function compiles with the `i` flag by default (case-insensitive), or no flags under `-s`/`--case-sensitive`; compiled regexes are cached by pattern. Under `-F`/`--fixed-strings`, regex metacharacters in the term are escaped so it matches literally. The first matching part per session is surfaced as a preview snippet.
+Each term is bound as a JavaScript-compatible regex by default. `-s` /
+`--case-sensitive` controls case folding; `-F` / `--fixed-strings` uses literal
+substring matching. Invalid regexes fail before execution.
 
 ### Canonical content
 
-For a legacy-owned session, readable text is in the `part` table's JSON `data`
-column rather than `message.data`:
-
-| `type` | field | what it is |
-|---|---|---|
-| `text` | `$.text` | user prompts and assistant prose replies |
-| `reasoning` | `$.text` | model chain-of-thought |
-| `tool` | `$.state.input`, `$.state.output` | tool call args and results |
-
-For a V2-owned session, `cotail` reads user text and assistant text/reasoning
-from `session_message`, ordered by message `seq` and assistant content-array
-position. V2 tool and shell search are rejected until a canonical searchable
-representation is selected. Legacy residue is never unioned into a V2-owned
-session, including when the native projection has zero rows. Mixed databases
-must have a completed `migration.v1-v2` marker; active or incomplete migration
-state is rejected rather than read partially.
+Cotail reads only `session_v2` and `session_message`. Searchable documents cover
+user, synthetic, system, skill, assistant text/reasoning, tool names/inputs/
+outputs/errors, shell commands/outputs, attachment metadata, compaction text,
+and Session title/location. Base64 bodies and opaque provider metadata are not
+silently flattened. Message order uses `seq`; nested order uses source array
+positions. Legacy residue is never unioned, including when a V2 Session has zero
+Messages. Databases retaining legacy Sessions require a completed
+`migration.v1-v2` marker.
 
 ## Planned: FTS phase
 

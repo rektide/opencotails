@@ -364,7 +364,8 @@ function inspect(database: DatabaseSync): Effect.Effect<SourceCapabilities, Sour
       const messageID = String(row.id);
       const messageType = String(row.type);
       try {
-        validatePayload(messageID, messageType, JSON.parse(String(row.data)));
+        const data = JSON.parse(String(row.data)) as Record<string, unknown>;
+        validatePayload(messageID, messageType, { ...data, id: messageID, type: messageType });
       } catch (cause) {
         const issue = cause instanceof PayloadIssue ? cause : new PayloadIssue("$", String(cause));
         return yield* Effect.fail(new SourceSchemaError({

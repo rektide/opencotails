@@ -72,7 +72,7 @@ test("groups independent witnesses with per-Session limits and stable evidence",
     assert.equal(evidence[0]!.document.revision?.messageUpdatedAt, 21);
     assert.match(evidence[0]!.document.revision?.payloadHash ?? "", /^[a-f0-9]{64}$/);
     assert.equal(evidence[0]!.document.revision?.payloadHash, createHash("sha256")
-      .update('{"id":"msg_c0","text":"alpha","time":{"created":1},"type":"user"}').digest("hex"));
+      .update('{"text":"alpha","time":{"created":1}}').digest("hex"));
     assert.notEqual(evidence[0]!.document.revision?.payloadHash, JSON.stringify(evidence[0]!.document.target.address));
     assert.ok(Number.isSafeInteger(evidence[0]!.document.observedAt));
     assert.equal(new Set(evidence.map((child) => child.document.observedAt)).size, 1);

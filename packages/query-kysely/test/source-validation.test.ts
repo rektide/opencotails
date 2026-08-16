@@ -190,16 +190,13 @@ test("rejects malformed known payloads with message identity and precise nested 
   }
 });
 
-test("rejects mismatched required root identity before publishing a source", () => {
+test("reconstructs column identity before validating stored Message data", () => {
   const fixture = openCodeV2Fixture();
   try {
-    fixture.addMessage("system", { id: "msg_other", type: "system", text: "hidden", time: { created: 1 } }, "msg_row");
-    const error = failure(fixture.database);
-    assert(error instanceof SourceSchemaError);
-    assert.equal(error.reason, "malformed-message-payload");
-    assert.equal(error.messageID, "msg_row");
-    assert.equal(error.messageType, "system");
-    assert.equal(error.path, "$.id");
+    fixture.addMessage("system", { text: "visible", time: { created: 1 } }, "msg_row");
+    assert.doesNotThrow(() => inspect(fixture.database));
+    const stored = fixture.database.prepare("select data from session_message where id = 'msg_row'").get() as { data: string };
+    assert.deepEqual(JSON.parse(stored.data), { text: "visible", time: { created: 1 } });
   } finally {
     fixture.database.close();
   }

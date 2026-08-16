@@ -78,31 +78,17 @@ export type EntityAddress =
   | WorkspaceAddress
   | EventAddress;
 
-export type DocumentField =
-  | "user.text"
-  | "synthetic.text"
-  | "system.text"
-  | "skill.text"
-  | "assistant.text"
-  | "assistant.reasoning"
-  | "tool.name"
-  | "tool.input"
-  | "tool.output"
-  | "tool.error"
-  | "shell.command"
-  | "shell.output"
-  | "attachment.name"
-  | "attachment.description"
-  | "attachment.uri"
-  | "compaction.summary"
-  | "compaction.recent"
-  | "compaction.error"
-  | "session.title"
-  | "session.location"
-  | "project.name"
-  | "project.root"
-  | "workspace.provider"
-  | "event.payload";
+export const documentFields = [
+  "user.text", "synthetic.text", "system.text", "skill.text",
+  "assistant.text", "assistant.reasoning",
+  "tool.name", "tool.input", "tool.output", "tool.error",
+  "shell.command", "shell.output",
+  "attachment.name", "attachment.description", "attachment.uri",
+  "compaction.summary", "compaction.recent", "compaction.error",
+  "session.title", "session.location",
+  "project.name", "project.root", "workspace.provider", "event.payload",
+] as const;
+export type DocumentField = typeof documentFields[number];
 
 export interface DocumentAddress {
   readonly kind: "document";
@@ -123,32 +109,7 @@ export interface Target<A extends Address = Address> {
   readonly address: A;
 }
 
-const documentFields: ReadonlySet<string> = new Set<DocumentField>([
-  "user.text",
-  "synthetic.text",
-  "system.text",
-  "skill.text",
-  "assistant.text",
-  "assistant.reasoning",
-  "tool.name",
-  "tool.input",
-  "tool.output",
-  "tool.error",
-  "shell.command",
-  "shell.output",
-  "attachment.name",
-  "attachment.description",
-  "attachment.uri",
-  "compaction.summary",
-  "compaction.recent",
-  "compaction.error",
-  "session.title",
-  "session.location",
-  "project.name",
-  "project.root",
-  "workspace.provider",
-  "event.payload",
-]);
+const documentFieldSet: ReadonlySet<string> = new Set(documentFields);
 
 function nonEmpty(name: string, value: string): string {
   if (value.length === 0 || value.trim().length === 0) {
@@ -202,7 +163,7 @@ export function documentAddress(
   field: DocumentField,
   segment: number,
 ): DocumentAddress {
-  if (!documentFields.has(field)) {
+  if (!documentFieldSet.has(field)) {
     throw new TypeError(`unknown document field: ${String(field)}`);
   }
   return Object.freeze({ kind: "document", owner, field, segment: coordinate("document segment", segment) });

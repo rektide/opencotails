@@ -43,8 +43,8 @@ export interface OpenCodeV2Fixture {
   readonly addEvent: (id?: string) => void;
 }
 
-export function validMessageData(type: string, id: string, created = 1): Record<string, unknown> {
-  const base = { id, type, time: { created } };
+export function validMessageData(type: string, _id: string, created = 1): Record<string, unknown> {
+  const base = { time: { created } };
   switch (type) {
     case "agent-switched": return { ...base, agent: "build" };
     case "model-switched": return { ...base, model: { id: "fixture", providerID: "fixture" } };
