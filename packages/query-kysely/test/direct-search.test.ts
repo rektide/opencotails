@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
 import { literal } from "../src/direct/match.ts";
+import { sessionDirectoryExact } from "../src/direct/session.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
@@ -102,6 +103,20 @@ test("global hit limit follows Session-page order without dropping groups", asyn
     });
     assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_c", "ses_b", "ses_a"]);
     assert.deepEqual(result.map((group) => group.children.length), [2, 0, 0]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("applies a contextual Session predicate before witness qualification", async () => {
+  const fixture = await searchFixture();
+  try {
+    const result = await runSearch(fixture.path, {
+      witnesses: [alpha],
+      sessionPredicate: sessionDirectoryExact("/b"),
+      window: { sessions: { first: 3 }, childrenPerSession: 1 },
+    });
+    assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_b"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

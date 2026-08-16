@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { sql } from "kysely";
 import type { DocumentWitness, WitnessName } from "../direct/witness.ts";
+import type { SessionPredicate } from "../direct/session.ts";
+import { sessionContext } from "./session-context.ts";
 import {
   mapDocumentTarget,
   RowDecodeError,
@@ -26,6 +28,7 @@ export interface DirectSessionSearch {
   readonly window: GroupWindow;
   readonly evidence?: boolean;
   readonly excerptLength?: number;
+  readonly sessionPredicate?: SessionPredicate;
 }
 
 export type DirectSearchError = QueryError | RowDecodeError;
@@ -147,6 +150,9 @@ export function searchDirectSessions(
           "cotail_session.updatedAt as sessionUpdatedAt",
           sql<string>`${source.sourceID}`.as("sourceID"),
         ]);
+      if (request.sessionPredicate !== undefined) {
+        sessions = sessions.where((eb) => request.sessionPredicate!(sessionContext(eb)));
+      }
       for (const witness of request.witnesses) {
         sessions = sessions.where((eb) => witness.forSession({
           eb,

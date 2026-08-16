@@ -32,6 +32,24 @@ export interface SessionSummary {
   readonly updatedAt: number;
 }
 
+/** Session metadata shaped for the existing history and get-session consumers. */
+export interface SessionDetails {
+  readonly id: string;
+  readonly title: string | null;
+  readonly directory: string;
+  readonly slug: string;
+  readonly projectId: string;
+  readonly parentId: string | null;
+  readonly version: string;
+  readonly timeCreated: number;
+  readonly timeUpdated: number;
+}
+
+export interface HistoryEntry extends SessionDetails {
+  readonly messagesTotal: number;
+  readonly messagesRecent: number;
+}
+
 export interface GroupedSession<Child> {
   readonly session: Located<SessionAddress, SessionSummary>;
   readonly children: readonly Child[];
