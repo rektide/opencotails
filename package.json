@@ -28,15 +28,12 @@
   },
   "homepage": "https://github.com/rektide/opencoattails#readme",
   "dependencies": {
-    "@opencoattails/opencode-live-store": "workspace:*",
     "@opencoattails/query-kysely": "workspace:*",
     "apache-arrow": "^21.2.0",
     "effect": "4.0.0-beta.101",
     "opencoattails": "link:"
   },
   "devDependencies": {
-    "@opencoattails/query-domain": "workspace:*",
-    "@opencoattails/test-contracts": "workspace:*",
     "@types/node": "^26.2.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2"
   }

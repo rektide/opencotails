@@ -9,7 +9,7 @@ import {
   vectorFromArray,
   type Vector,
 } from "apache-arrow";
-import type { SessionSummary } from "@opencoattails/query-domain";
+import type { SessionDetails } from "@opencoattails/query-kysely";
 import type { SearchHit, SessionCounts } from "./opencode/types.ts";
 
 const utf8 = new Utf8();
@@ -86,7 +86,7 @@ export async function emitHistoryArrow(rows: readonly SessionCounts[]): Promise<
   });
 }
 
-export async function emitSessionArrow(rows: readonly SessionSummary[]): Promise<void> {
+export async function emitSessionArrow(rows: readonly SessionDetails[]): Promise<void> {
   await emit(sessionSchema, rows.length, {
     id: vectorFromArray(rows.map((row) => row.id), utf8),
     title: vectorFromArray(rows.map((row) => row.title), utf8),

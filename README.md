@@ -6,19 +6,18 @@ opencode writes its full session history (messages, reasoning, tool calls, patch
 
 > **Status:** prototype (phase 0). Commands run **direct scans** against the live opencode DB today — no index, no build step, milliseconds to a few seconds per query. An FTS-indexed phase (`index`/`status`, sub-50ms search) is planned (see [Planned: FTS phase](#planned-fts-phase)).
 
-The direct-query implementation is now a pnpm workspace: domain contracts live
-in [`packages/query-domain`](/packages/query-domain/src/index.ts), while the
-private Kysely/`node:sqlite` integration lives in
-[`packages/opencode-live-store`](/packages/opencode-live-store/src/index.ts).
-Title and V1/V2 content search support executable API-level `all`/`any`/`none`;
-existing positional CLI syntax remains AND-compatible and has no new boolean
-flags. V2-owned sessions use `session_v2` metadata and `session_message`
-content/counts; only sessions without a V2 owner use legacy `session`, `message`,
-and `part` rows. See the [implementation report](/.design/query/implementation1.md).
+The direct-query implementation is a pnpm workspace. The V2 logical schema,
+domain results, operations, and Kysely/`node:sqlite` source integration live in
+[`packages/query-kysely`](/packages/query-kysely/src/index.ts), with Effect-based
+query composition in [`packages/query-runtime`](/packages/query-runtime/src/index.ts).
+Production commands read `session_v2` metadata and `session_message` content and
+counts. V1-only databases are rejected, and preserved legacy rows are ignored
+after migration completes. Existing positional CLI search syntax remains
+AND-compatible.
 
 ## Quickstart
 
-Requires **Node.js 22.13+**. The live store uses the built-in
+Requires **Node.js 22.13+**. The query source uses the built-in
 [`node:sqlite`](https://nodejs.org/api/sqlite.html) module with Kysely; there are
 no third-party native bindings.
 

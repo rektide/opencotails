@@ -11,9 +11,6 @@ importers:
 
   .:
     dependencies:
-      '@opencoattails/opencode-live-store':
-        specifier: workspace:*
-        version: link:packages/opencode-live-store
       '@opencoattails/query-kysely':
         specifier: workspace:*
         version: link:packages/query-kysely
@@ -27,33 +24,12 @@ importers:
         specifier: 'link:'
         version: 'link:'
     devDependencies:
-      '@opencoattails/query-domain':
-        specifier: workspace:*
-        version: link:packages/query-domain
-      '@opencoattails/test-contracts':
-        specifier: workspace:*
-        version: link:packages/test-contracts
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
-
-  packages/opencode-live-store:
-    dependencies:
-      '@opencoattails/query-domain':
-        specifier: workspace:*
-        version: link:../query-domain
-      kysely:
-        specifier: 0.29.5
-        version: 0.29.5
-    devDependencies:
-      '@opencoattails/test-contracts':
-        specifier: workspace:*
-        version: link:../test-contracts
-
-  packages/query-domain: {}
 
   packages/query-kysely:
     dependencies:
@@ -83,12 +59,6 @@ importers:
       '@effect/language-service':
         specifier: ^0.87.2
         version: 0.87.2
-
-  packages/test-contracts:
-    dependencies:
-      '@opencoattails/query-domain':
-        specifier: workspace:*
-        version: link:../query-domain
 
 packages:
 
