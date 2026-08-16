@@ -4,11 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test, { after } from "node:test";
-import { createCliDatabase } from "./fixtures/cli-database.ts";
+import { createCliDatabase, createV1OnlyCliDatabase } from "./fixtures/cli-database.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "cotail-characterization-"));
 const database = join(directory, "fixture.db");
 createCliDatabase(database);
+const v1Database = join(directory, "v1.db");
+createV1OnlyCliDatabase(v1Database);
 after(() => rmSync(directory, { recursive: true, force: true }));
 
 function cli(args: readonly string[]) {
@@ -58,6 +60,26 @@ test("lookup preserves id, JSONL, and not-found behavior", () => {
   const missing = cli(["get-session", "-s", "missing", "--db", database]);
   assert.equal(missing.status, 1);
   assert.equal(missing.stderr, "session not found (session missing)\n");
+});
+
+test("all production query commands reject V1-only databases", () => {
+  for (const args of [
+    ["search", "alpha", "--db", v1Database],
+    ["history", "--db", v1Database],
+    ["get-session", "-s", "ses_v1_only", "--db", v1Database],
+  ]) {
+    const result = cli(args);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /OpenCode V1-only databases are not query sources/);
+  }
+});
+
+test("completed V1 residue is ignored by search, history, and lookup", () => {
+  assert.equal(cli(["search", "POISON", "--title-only", "--json", "--db", database]).stdout, "");
+  assert.doesNotMatch(cli(["history", "--since", "1970-01-01", "--json", "--db", database]).stdout, /POISON|ses_v1_only/);
+  const lookup = cli(["get-session", "-s", "ses_v1_only_abcdefghijkl", "--db", database]);
+  assert.equal(lookup.status, 1);
+  assert.equal(lookup.stderr, "session not found (session ses_v1_only_abcdefghijkl)\n");
 });
 
 test("parse and database errors preserve exit statuses", () => {

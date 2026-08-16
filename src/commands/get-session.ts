@@ -1,9 +1,16 @@
 import { existsSync } from "node:fs";
+import { Effect } from "effect";
+import {
+  acquireNodeOpenCodeSource,
+  resolveSession as querySession,
+  sessionDirectoryExact,
+  sessionIDs,
+  type SessionDetails,
+  type SessionPredicate,
+} from "@opencoattails/query-kysely";
 import { parseDirectoryArg } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import { discoverDb } from "../opencode/db.ts";
-import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
-import type { SessionSummary as SessionInfo } from "@opencoattails/query-domain";
 import { readProcInfo, resolvePidInput } from "../opencode/pid.ts";
 import { emitSessionArrow } from "../arrow.ts";
 
@@ -16,6 +23,8 @@ interface Args {
   idOnly: boolean;
   arrow: boolean;
 }
+
+type SessionInfo = SessionDetails & { readonly title: string };
 
 function fmtLocal(ms: number): string {
   const d = new Date(ms);
@@ -108,19 +117,19 @@ function renderHuman(info: SessionInfo, via: string): void {
 async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: string }> {
   // 1. explicit session id — no resolution needed
   if (args.sessionId) {
-    return loadAndReport(args, { selector: { ids: [args.sessionId] }, mode: "only" }, `session ${args.sessionId}`);
+    return loadAndReport(args, sessionIDs([args.sessionId]), "only", `session ${args.sessionId}`);
   }
 
   // 2. explicit directory — skip /proc, match the dir
   if (args.directory) {
-    return loadAndReport(args, { selector: { directory: { value: args.directory, mode: "exact" } }, mode: "latest" }, `directory ${args.directory}`);
+    return loadAndReport(args, sessionDirectoryExact(args.directory), "latest", `directory ${args.directory}`);
   }
 
   // 3. direct env shortcut
   const envSid = process.env.OPENCODE_SESSION_ID;
   const pid = resolvePidInput(args.pid);
   if (envSid && args.pid === undefined) {
-    return loadAndReport(args, { selector: { ids: [envSid] }, mode: "only" }, `$OPENCODE_SESSION_ID`);
+    return loadAndReport(args, sessionIDs([envSid]), "only", `$OPENCODE_SESSION_ID`);
   }
 
   // 4. PID via /proc
@@ -132,38 +141,37 @@ async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: str
   const proc = readProcInfo(pid);
   const dbPath = args.dbPath ?? proc.db;
   const via = proc.comm ? `pid ${pid} (${proc.comm}) @ ${proc.cwd}` : `pid ${pid} @ ${proc.cwd}`;
-  const { store, close } = openDb(dbPath);
-  try {
-    const info = await store.resolve({ selector: { directory: { value: proc.cwd, mode: "exact" } }, mode: "latest" });
-    if (!info) {
-      throw new Error(`no session found for directory ${proc.cwd} (pid ${pid})`);
-    }
-    return { info, via };
-  } finally {
-    await close();
+  const info = await loadSession(dbPath, sessionDirectoryExact(proc.cwd), "latest");
+  if (!info) {
+    throw new Error(`no session found for directory ${proc.cwd} (pid ${pid})`);
   }
+  return { info, via };
 }
 
-function openDb(dbPath: string | undefined): { store: ReturnType<typeof openOpencodeLiveStore>; close: () => Promise<void> } {
+async function loadSession(
+  dbPath: string | undefined,
+  predicate: SessionPredicate,
+  mode: "latest" | "only",
+): Promise<SessionInfo | undefined> {
   const resolved = discoverDb(dbPath);
   if (!existsSync(resolved)) throw new Error(`db not found: ${resolved}`);
-  const store = openOpencodeLiveStore(resolved);
-  return { store, close: () => store.close() };
+  const info = await Effect.runPromise(Effect.scoped(
+    acquireNodeOpenCodeSource({ path: resolved, sourceID: "cli" }).pipe(
+      Effect.flatMap(({ query }) => querySession(query, { predicate, mode })),
+    ),
+  ));
+  return info === undefined ? undefined : { ...info, title: info.title ?? "" };
 }
 
 async function loadAndReport(
   args: Args,
-  request: Parameters<ReturnType<typeof openOpencodeLiveStore>["resolve"]>[0],
+  predicate: SessionPredicate,
+  mode: "latest" | "only",
   via: string,
 ): Promise<{ info: SessionInfo; via: string }> {
-  const { store, close } = openDb(args.dbPath);
-  try {
-    const info = await store.resolve(request);
-    if (!info) throw new Error(`session not found (${via})`);
-    return { info, via };
-  } finally {
-    await close();
-  }
+  const info = await loadSession(args.dbPath, predicate, mode);
+  if (!info) throw new Error(`session not found (${via})`);
+  return { info, via };
 }
 
 export async function run(argv: string[]): Promise<void> {

@@ -1,8 +1,21 @@
 import { existsSync } from "node:fs";
+import { Effect } from "effect";
+import {
+  acquireNodeOpenCodeSource,
+  documentWitness,
+  literal,
+  regex,
+  searchDirectSessions,
+  sessionDirectoryContains,
+  sessionPredicate,
+  sessionUpdatedRange,
+  witnessName,
+  type DocumentField,
+  type SessionPredicate,
+} from "@opencoattails/query-kysely";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import { discoverDb } from "../opencode/db.ts";
-import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { PartType, SearchHit } from "../opencode/types.ts";
 import { emitSearchArrow } from "../arrow.ts";
 
@@ -25,50 +38,53 @@ function sqliteDate(milliseconds: number): string {
   return new Date(milliseconds).toISOString().slice(0, 19).replace("T", " ");
 }
 
-async function titleRows(path: string, args: Args): Promise<SearchHit[]> {
-  const store = openOpencodeLiveStore(path);
-  try {
-    const hits = await store.searchDirect({
-      selector: {
-        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
-        updated: args.sinceMs === undefined ? undefined : { from: args.sinceMs },
-      },
-      title: { all: args.terms.map((source) => ({ source, mode: args.fixedStrings ? "literal" : "regex", caseSensitive: args.caseSensitive })) },
-      evidence: false,
-      limit: args.limit,
-    });
-    return hits.map(({ session }) => ({
-      id: session.id, slug: session.slug, title: session.title, directory: session.directory,
-      created: sqliteDate(session.timeCreated), updated: sqliteDate(session.timeUpdated),
-    }));
-  } finally {
-    await store.close();
-  }
+const SEARCH_FIELDS: Record<PartType, readonly DocumentField[]> = {
+  text: ["user.text", "synthetic.text", "system.text", "skill.text", "assistant.text"],
+  reasoning: ["assistant.reasoning"],
+  tool: ["tool.name", "tool.input", "tool.output", "tool.error"],
+};
+
+function selection(args: Args): SessionPredicate | undefined {
+  const predicates: SessionPredicate[] = [];
+  if (args.directory !== undefined) predicates.push(sessionDirectoryContains(args.directory));
+  if (args.sinceMs !== undefined) predicates.push(sessionUpdatedRange({ from: args.sinceMs }));
+  return predicates.length === 0
+    ? undefined
+    : sessionPredicate((context) => context.eb.and(predicates.map((predicate) => predicate(context))));
 }
 
-async function contentRows(path: string, args: Args): Promise<SearchHit[]> {
-  const store = openOpencodeLiveStore(path);
-  try {
-    const hits = await store.searchDirect({
-      selector: {
-        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
-        updated: args.sinceMs === undefined ? undefined : { from: args.sinceMs },
-      },
-      requirements: { all: args.terms.map((source) => ({
-        types: [args.typeFilter],
-        text: { all: [{ source, mode: args.fixedStrings ? "literal" : "regex", caseSensitive: args.caseSensitive }] },
-      })) },
-      evidence: args.showSnippet,
-      limit: args.limit,
-    });
-    return hits.map(({ session, evidenceText }) => ({
-      id: session.id, slug: session.slug, title: session.title, directory: session.directory,
-      created: sqliteDate(session.timeCreated), updated: sqliteDate(session.timeUpdated),
-      ...(evidenceText === undefined ? {} : { snippet: evidenceText }),
-    }));
-  } finally {
-    await store.close();
-  }
+async function searchRows(path: string, args: Args): Promise<SearchHit[]> {
+  const fields: readonly DocumentField[] = args.titleOnly ? ["session.title"] : SEARCH_FIELDS[args.typeFilter];
+  const witnesses = args.terms.map((term, index) => documentWitness(
+    witnessName(`term-${String(index).padStart(6, "0")}`),
+    (eb) => eb.and([
+      eb("field", "in", fields),
+      args.fixedStrings
+        ? literal(eb.ref("text"), term, { case: args.caseSensitive ? "sensitive" : "insensitive" })
+        : regex(eb.ref("text"), term, { flags: args.caseSensitive ? "" : "i" }),
+    ]),
+  ));
+  const groups = await Effect.runPromise(Effect.scoped(
+    acquireNodeOpenCodeSource({ path, sourceID: "cli" }).pipe(
+      Effect.flatMap(({ query }) => args.limit === 0
+        ? Effect.succeed([] as const)
+        : searchDirectSessions(query, {
+          witnesses,
+          sessionPredicate: selection(args),
+          evidence: !args.titleOnly && args.showSnippet,
+          window: { sessions: { first: args.limit }, childrenPerSession: 1 },
+        })),
+    ),
+  ));
+  return groups.map(({ session, children }) => ({
+    id: session.value.sessionID,
+    slug: session.value.slug,
+    title: session.value.title ?? "",
+    directory: session.value.directory,
+    created: sqliteDate(session.value.createdAt),
+    updated: sqliteDate(session.value.updatedAt),
+    ...(children[0] === undefined ? {} : { snippet: children[0].document.value.excerpt }),
+  }));
 }
 
 function renderHuman(rows: SearchHit[], showSnippet: boolean): void {
@@ -218,8 +234,13 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const rows = args.titleOnly ? await titleRows(dbPath, args) : await contentRows(dbPath, args);
-  if (args.arrow) await emitSearchArrow(rows);
-  else if (args.json) emitJsonl(rows);
-  else renderHuman(rows, args.showSnippet);
+  try {
+    const rows = await searchRows(dbPath, args);
+    if (args.arrow) await emitSearchArrow(rows);
+    else if (args.json) emitJsonl(rows);
+    else renderHuman(rows, args.showSnippet);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
 }

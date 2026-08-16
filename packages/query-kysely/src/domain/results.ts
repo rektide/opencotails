@@ -26,6 +26,7 @@ export interface DirectHit<A extends import("./address.ts").Address, V> extends 
 export interface SessionSummary {
   readonly sessionID: string;
   readonly projectID: string;
+  readonly slug: string;
   readonly title: string | null;
   readonly directory: string;
   readonly createdAt: number;

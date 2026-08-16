@@ -1,8 +1,16 @@
 import { existsSync } from "node:fs";
+import { Effect } from "effect";
+import {
+  acquireNodeOpenCodeSource,
+  readSessionHistory,
+  sessionDirectoryContains,
+  sessionPredicate,
+  sessionUpdatedRange,
+  type SessionPredicate,
+} from "@opencoattails/query-kysely";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
 import { discoverDb } from "../opencode/db.ts";
-import { openOpencodeLiveStore } from "@opencoattails/opencode-live-store";
 import type { SessionCounts } from "../opencode/types.ts";
 import { emitHistoryArrow } from "../arrow.ts";
 
@@ -154,18 +162,21 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const store = openOpencodeLiveStore(dbPath);
   try {
-    const entries = await store.history({
-      selector: {
-        directory: args.directory === undefined ? undefined : { value: args.directory, mode: "contains" },
-        updated: { from: cutoff },
-      },
-      countSince: cutoff,
-      limit: args.limit,
-    });
+    const predicates: SessionPredicate[] = [sessionUpdatedRange({ from: cutoff })];
+    if (args.directory !== undefined) predicates.push(sessionDirectoryContains(args.directory));
+    const predicate = sessionPredicate((context) => context.eb.and(
+      predicates.map((candidate) => candidate(context)),
+    ));
+    const entries = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: dbPath, sourceID: "cli" }).pipe(Effect.flatMap(({ query }) => readSessionHistory(query, {
+        predicate,
+        countSince: cutoff,
+        limit: args.limit,
+      }))),
+    ));
     const rows: SessionCounts[] = entries.map((entry) => ({
-      id: entry.id, title: entry.title, directory: entry.directory, slug: entry.slug,
+      id: entry.id, title: entry.title ?? "", directory: entry.directory, slug: entry.slug,
       time_created: entry.timeCreated, time_updated: entry.timeUpdated,
       messages_total: entry.messagesTotal, messages_recent: entry.messagesRecent,
     }));
@@ -173,7 +184,8 @@ export async function run(argv: string[]): Promise<void> {
     else if (args.json) renderJson(rows);
     else if (args.tsv) renderTsv(rows);
     else renderTableOutput(rows, cutoff);
-  } finally {
-    await store.close();
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
   }
 }

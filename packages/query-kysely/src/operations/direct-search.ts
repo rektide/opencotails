@@ -36,11 +36,13 @@ export type DirectSearchError = QueryError | RowDecodeError;
 interface SearchRow extends DocumentRelation {
   readonly sourceID: string;
   readonly sessionProjectID: string;
+  readonly sessionSlug: string;
   readonly sessionTitle: string | null;
   readonly sessionDirectory: string;
   readonly sessionCreatedAt: number;
   readonly sessionUpdatedAt: number;
   readonly witnessName: string | null;
+  readonly witnessOrder: number | null;
   readonly sessionRank: number | null;
   readonly sessionTotal: number | null;
 }
@@ -94,6 +96,7 @@ function decodeRows(
       const summary: SessionSummary = Object.freeze({
         sessionID: row.sessionID,
         projectID: row.sessionProjectID,
+        slug: row.sessionSlug,
         title: row.sessionTitle,
         directory: row.sessionDirectory,
         createdAt: row.sessionCreatedAt,
@@ -144,6 +147,7 @@ export function searchDirectSessions(
         .select([
           "cotail_session.sessionID",
           "cotail_session.projectID as sessionProjectID",
+          "cotail_session.slug as sessionSlug",
           "cotail_session.title as sessionTitle",
           "cotail_session.directory as sessionDirectory",
           "cotail_session.createdAt as sessionCreatedAt",
@@ -175,22 +179,26 @@ export function searchDirectSessions(
         .limit(request.window.sessions.first);
     })
     .with("matching_documents", (qb) => {
-      const branch = (witness: DocumentWitness) => qb
+      const branch = (witness: DocumentWitness, witnessOrder: number) => qb
         .selectFrom("cotail_document")
         .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_document.sessionID")
         .where(witness.matches)
         .select([
           ...documentColumns.map((column) => `cotail_document.${column}` as const),
           "qualified_sessions.sessionProjectID",
+          "qualified_sessions.sessionSlug",
           "qualified_sessions.sessionTitle",
           "qualified_sessions.sessionDirectory",
           "qualified_sessions.sessionCreatedAt",
           "qualified_sessions.sessionUpdatedAt",
           "qualified_sessions.sourceID",
           sql<string>`${witness.name}`.as("witnessName"),
+          sql<number>`${witnessOrder}`.as("witnessOrder"),
         ]);
-      let matches = branch(request.witnesses[0]!);
-      for (const witness of request.witnesses.slice(1)) matches = matches.unionAll(branch(witness));
+      let matches = branch(request.witnesses[0]!, 0);
+      for (const [index, witness] of request.witnesses.slice(1).entries()) {
+        matches = matches.unionAll(branch(witness, index + 1));
+      }
       return matches;
     })
     .with("ranked_documents", (qb) => qb
@@ -199,7 +207,7 @@ export function searchDirectSessions(
       .select([
         sql<number>`row_number() over (
           partition by ${sql.ref("sessionID")}
-          order by coalesce(${sql.ref("messageSeq")}, -1), ${sql.ref("fieldOrder")},
+           order by ${sql.ref("witnessOrder")}, coalesce(${sql.ref("messageSeq")}, -1), ${sql.ref("fieldOrder")},
                    ${sql.ref("documentKey")}, ${sql.ref("witnessName")}
         )`.as("sessionRank"),
         sql<number>`count(*) over (partition by ${sql.ref("sessionID")})`.as("sessionTotal"),
@@ -222,6 +230,7 @@ export function searchDirectSessions(
       "qualified_sessions.sourceID",
       "qualified_sessions.sessionID",
       "qualified_sessions.sessionProjectID",
+      "qualified_sessions.sessionSlug",
       "qualified_sessions.sessionTitle",
       "qualified_sessions.sessionDirectory",
       "qualified_sessions.sessionCreatedAt",
@@ -229,6 +238,7 @@ export function searchDirectSessions(
       ...documentColumns.filter((column) => column !== "sessionID")
         .map((column) => `session_hits.${column}` as const),
       "session_hits.witnessName",
+      "session_hits.witnessOrder",
       "session_hits.sessionRank",
       "session_hits.sessionTotal",
     ])
