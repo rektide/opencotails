@@ -1,3 +1,5 @@
+import type { DocumentField } from "../domain/address.ts";
+
 export interface SessionRelation {
   readonly sessionID: string;
   readonly projectID: string;
@@ -183,6 +185,32 @@ export interface CompactionRelation {
   readonly metadataJSON: string | null;
 }
 
+export type DocumentExposure =
+  | "ordinary"
+  | "system"
+  | "reasoning"
+  | "tool"
+  | "shell"
+  | "sensitive-metadata";
+
+export interface DocumentRelation {
+  readonly documentKey: string;
+  readonly ownerKind: "session" | "message" | "content" | "tool-call" | "tool-result" | "shell" | "attachment";
+  readonly sessionID: string | null;
+  readonly projectID: string | null;
+  readonly workspaceID: string | null;
+  readonly messageID: string | null;
+  readonly contentIndex: number | null;
+  readonly nestedIndex: number | null;
+  readonly nativeID: string | null;
+  readonly field: DocumentField;
+  readonly text: string;
+  readonly messageSeq: number | null;
+  readonly messageUpdatedAt: number | null;
+  readonly fieldOrder: number;
+  readonly exposure: DocumentExposure;
+}
+
 export interface CotailRelations {
   readonly cotail_session: SessionRelation;
   readonly cotail_message: MessageRelation;
@@ -194,4 +222,5 @@ export interface CotailRelations {
   readonly cotail_shell_execution: ShellExecutionRelation;
   readonly cotail_attachment: AttachmentRelation;
   readonly cotail_compaction: CompactionRelation;
+  readonly cotail_document: DocumentRelation;
 }

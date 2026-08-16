@@ -7,6 +7,7 @@ import type {
   CompactionRelation,
   ContentRelation,
   CotailRelations,
+  DocumentRelation,
   ShellExecutionRelation,
   ToolCallRelation,
   ToolResultRelation,
@@ -234,6 +235,109 @@ export function logicalWorld(
           and json_type(data, '$.summary') = 'text' and json_type(data, '$.recent') = 'text')
           or (json_extract(data, '$.status') = 'failed'
             and json_type(data, '$.error.type') = 'text' and json_type(data, '$.error.message') = 'text'))
+    )`)
+    .with("cotail_document", () => sql<DocumentRelation>`(
+      select json_array('session', sessionID, 'session.title', 0) as documentKey,
+             'session' as ownerKind, sessionID, projectID, workspaceID,
+             null as messageID, null as contentIndex, null as nestedIndex, null as nativeID,
+             'session.title' as field, title as text, null as messageSeq,
+             null as messageUpdatedAt, 0 as fieldOrder, 'sensitive-metadata' as exposure
+      from cotail_session where typeof(title) = 'text'
+      union all
+      select json_array('session', sessionID, 'session.location', 0),
+             'session', sessionID, projectID, workspaceID, null, null, null, null,
+             'session.location', directory, null, null, 1, 'sensitive-metadata'
+      from cotail_session where typeof(directory) = 'text'
+      union all
+      select json_array('session', sessionID, 'session.location', 1),
+             'session', sessionID, projectID, workspaceID, null, null, null, null,
+             'session.location', path, null, null, 2, 'sensitive-metadata'
+      from cotail_session where typeof(path) = 'text'
+      union all
+      select json_array('content', c.sessionID, c.messageID, c.contentIndex,
+                        case c.contentKind when 'user' then 'user.text'
+                          when 'synthetic' then 'synthetic.text'
+                          when 'system' then 'system.text' when 'skill' then 'skill.text'
+                          when 'text' then 'assistant.text' else 'assistant.reasoning' end, 0),
+             'content', c.sessionID, null, null, c.messageID, c.contentIndex, null, null,
+             case c.contentKind when 'user' then 'user.text'
+               when 'synthetic' then 'synthetic.text'
+               when 'system' then 'system.text' when 'skill' then 'skill.text'
+               when 'text' then 'assistant.text' else 'assistant.reasoning' end,
+             c.text, c.messageSeq, m.updatedAt, c.contentIndex * 100,
+             case c.contentKind when 'system' then 'system' when 'skill' then 'sensitive-metadata'
+               when 'reasoning' then 'reasoning' else 'ordinary' end
+      from cotail_content c join cotail_message m on m.messageID = c.messageID and m.sessionID = c.sessionID
+      union all
+      select json_array('tool-call', t.sessionID, t.messageID, t.contentIndex, t.callID, 'tool.name', 0),
+             'tool-call', t.sessionID, null, null, t.messageID, t.contentIndex, null, t.callID,
+             'tool.name', t.toolName, t.messageSeq, m.updatedAt, t.contentIndex * 100, 'tool'
+      from cotail_tool_call t join cotail_message m on m.messageID = t.messageID and m.sessionID = t.sessionID
+      union all
+      select json_array('tool-call', t.sessionID, t.messageID, t.contentIndex, t.callID, 'tool.input', 0),
+             'tool-call', t.sessionID, null, null, t.messageID, t.contentIndex, null, t.callID,
+             -- Object inputs use SQLite's compact canonical JSON text; streaming text stays verbatim.
+             'tool.input', case when json_type(t.inputJSON) = 'object' then json(t.inputJSON)
+               else json_extract(t.inputJSON, '$') end,
+             t.messageSeq, m.updatedAt, t.contentIndex * 100 + 1, 'tool'
+      from cotail_tool_call t join cotail_message m on m.messageID = t.messageID and m.sessionID = t.sessionID
+      where json_valid(t.inputJSON) and json_type(t.inputJSON) in ('object', 'text')
+      union all
+      select json_array('tool-result', r.sessionID, r.messageID, r.contentIndex, r.callID,
+                        r.resultIndex, 'tool.output', cast(segment.key as integer)),
+             'tool-result', r.sessionID, null, null, r.messageID, r.contentIndex, r.resultIndex, r.callID,
+             'tool.output', segment.value, r.messageSeq, m.updatedAt,
+             r.contentIndex * 100 + 10 + r.resultIndex * 4 + cast(segment.key as integer), 'tool'
+      from cotail_tool_result r
+      join cotail_tool_call t on t.sessionID = r.sessionID and t.messageID = r.messageID
+        and t.contentIndex = r.contentIndex and t.callID = r.callID
+      join cotail_message m on m.messageID = r.messageID and m.sessionID = r.sessionID
+      join json_each(json_array(r.text, r.name, r.uri, r.mime)) segment
+      where typeof(segment.value) = 'text'
+      union all
+      select json_array('tool-call', t.sessionID, t.messageID, t.contentIndex, t.callID, 'tool.error', 0),
+             'tool-call', t.sessionID, null, null, t.messageID, t.contentIndex, null, t.callID,
+             'tool.error', t.errorMessage, t.messageSeq, m.updatedAt, t.contentIndex * 100 + 90, 'tool'
+      from cotail_tool_call t join cotail_message m on m.messageID = t.messageID and m.sessionID = t.sessionID
+      where t.state = 'error' and typeof(t.errorMessage) = 'text'
+      union all
+      select json_array('shell', s.sessionID, s.messageID, s.shellID, 'shell.command', 0),
+             'shell', s.sessionID, null, null, s.messageID, null, null, s.shellID,
+             'shell.command', s.command, s.messageSeq, m.updatedAt, 0, 'shell'
+      from cotail_shell_execution s join cotail_message m on m.messageID = s.messageID and m.sessionID = s.sessionID
+      union all
+      select json_array('shell', s.sessionID, s.messageID, s.shellID, 'shell.output', 0),
+             'shell', s.sessionID, null, null, s.messageID, null, null, s.shellID,
+             'shell.output', s.output, s.messageSeq, m.updatedAt, 1, 'shell'
+      from cotail_shell_execution s join cotail_message m on m.messageID = s.messageID and m.sessionID = s.sessionID
+      where typeof(s.output) = 'text'
+      union all
+      select json_array('attachment', a.sessionID, a.messageID, a.attachmentIndex,
+                        case value.key when 'name' then 'attachment.name'
+                          when 'description' then 'attachment.description'
+                          when 'uri' then 'attachment.uri' else 'skill.text' end, 0),
+             'attachment', a.sessionID, null, null, a.messageID, a.attachmentIndex, null, null,
+             case value.key when 'name' then 'attachment.name'
+               when 'description' then 'attachment.description'
+               when 'uri' then 'attachment.uri' else 'skill.text' end,
+             value.value, a.messageSeq, m.updatedAt,
+             a.attachmentIndex * 10 + case value.key when 'name' then 0 when 'description' then 1
+               when 'uri' then 2 else 3 end, 'sensitive-metadata'
+      from cotail_attachment a join cotail_message m on m.messageID = a.messageID and m.sessionID = a.sessionID
+      join json_each(json_object('name', a.name, 'description', a.description, 'uri', a.uri, 'text', a.text)) value
+      where value.type = 'text'
+      union all
+      select json_array('message', c.sessionID, c.messageID, json_extract(item.value, '$.field'), 0),
+             'message', c.sessionID, null, null, c.messageID, null, null, null,
+             json_extract(item.value, '$.field'), json_extract(item.value, '$.text'),
+             c.messageSeq, m.updatedAt, json_extract(item.value, '$.ord'), 'system'
+      from cotail_compaction c join cotail_message m on m.messageID = c.messageID and m.sessionID = c.sessionID
+      join json_each(json_array(
+        json_object('field', 'compaction.summary', 'text', c.summary, 'ord', 0),
+        json_object('field', 'compaction.recent', 'text', c.recent, 'ord', 1),
+        json_object('field', 'compaction.error', 'text', c.errorMessage, 'ord', 2)
+      )) item
+      where json_type(item.value, '$.text') = 'text'
     )`);
 
   // Kysely retains physical members in a CTE database type. This is the sole
