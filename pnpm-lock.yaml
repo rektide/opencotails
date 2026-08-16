@@ -14,9 +14,15 @@ importers:
       '@opencoattails/opencode-live-store':
         specifier: workspace:*
         version: link:packages/opencode-live-store
+      '@opencoattails/query-kysely':
+        specifier: workspace:*
+        version: link:packages/query-kysely
       apache-arrow:
         specifier: ^21.2.0
         version: 21.2.0
+      effect:
+        specifier: 4.0.0-beta.101
+        version: 4.0.0-beta.101
       opencoattails:
         specifier: 'link:'
         version: 'link:'
