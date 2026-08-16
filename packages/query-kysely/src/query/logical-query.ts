@@ -6,7 +6,7 @@ import type { CotailRelations } from "../relations/schema.ts";
 import type { SourceCapabilities } from "../source/capabilities.ts";
 import { QueryCompileError, QueryExecutionError } from "./errors.ts";
 
-export type AnyLogicalSelect = SelectQueryBuilder<CotailRelations, keyof CotailRelations, unknown>;
+export type AnyLogicalSelect = SelectQueryBuilder<any, any, any>;
 
 export interface QueryContext {
   readonly db: ReadonlyQueryCreator<CotailRelations>;
