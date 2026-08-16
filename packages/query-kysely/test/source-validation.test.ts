@@ -9,7 +9,7 @@ import {
   SourceSchemaError,
   inspectOpenCodeV2Source,
 } from "../src/source/index.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
 const inspect = (database: DatabaseSync) => Effect.runSync(inspectOpenCodeV2Source(database));
 
@@ -30,6 +30,44 @@ test("accepts the authoritative V2 projection and reports schema capabilities", 
     assert.equal(capabilities.pendingInput, true);
     assert.equal(capabilities.eventRows, "unavailable");
     assert.deepEqual([...capabilities.contentModel].sort(), [...CURRENT_MESSAGE_VARIANTS].sort());
+  } finally {
+    fixture.database.close();
+  }
+});
+
+test("accepts schema-valid nested attachments, tool states, shell output, and compaction variants", () => {
+  const fixture = openCodeV2Fixture();
+  try {
+    fixture.addMessage("user", {
+      ...validMessageData("user", "msg_user"),
+      files: [{ data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///input" } }],
+      agents: [{ name: "review", mention: { start: 0, end: 1, text: "r" } }],
+      skills: [{ id: "skill", name: "skill", text: "instructions" }],
+    }, "msg_user");
+    fixture.addMessage("shell", {
+      ...validMessageData("shell", "msg_shell"),
+      output: { output: "ok", cursor: 2, size: 2, truncated: false },
+      time: { created: 1, completed: 2 },
+    }, "msg_shell");
+    fixture.addMessage("assistant", {
+      ...validMessageData("assistant", "msg_assistant"),
+      content: [
+        { type: "text", text: "answer" },
+        { type: "reasoning", text: "thought", time: { created: 1, completed: 2 } },
+        { type: "tool", id: "stream", name: "read", state: { status: "streaming", input: "{" }, time: { created: 1 } },
+        { type: "tool", id: "run", name: "read", state: { status: "running", input: {}, metadata: {} }, time: { created: 1 } },
+        { type: "tool", id: "done", name: "read", state: { status: "completed", input: {}, content: [{ type: "text", text: "ok" }] }, time: { created: 1 } },
+        { type: "tool", id: "fail", name: "read", state: { status: "error", input: {}, error: { type: "tool", message: "failed" }, content: [{ type: "file", uri: "file:///partial", mime: "text/plain" }] }, time: { created: 1 } },
+      ],
+    }, "msg_assistant");
+    fixture.addMessage("compaction", {
+      ...validMessageData("compaction", "msg_compact_running"), status: "running",
+    }, "msg_compact_running");
+    fixture.addMessage("compaction", {
+      ...validMessageData("compaction", "msg_compact_failed"), status: "failed",
+      error: { type: "compact", message: "failed" }, summary: undefined, recent: undefined,
+    }, "msg_compact_failed");
+    assert.doesNotThrow(() => inspect(fixture.database));
   } finally {
     fixture.database.close();
   }
@@ -114,9 +152,56 @@ test("rejects unknown Message variants and malformed Message JSON", () => {
     const malformedError = failure(malformed.database);
     assert(malformedError instanceof SourceSchemaError);
     assert.equal(malformedError.reason, "malformed-message-data");
+    assert.equal(malformedError.messageType, "user");
+    assert.equal(malformedError.path, "$");
   } finally {
     unknown.database.close();
     malformed.database.close();
+  }
+});
+
+test("rejects malformed known payloads with message identity and precise nested paths", () => {
+  const cases = [
+    ["user", { ...validMessageData("user", "msg_bad"), files: [{ data: "%%%", mime: "text/plain", source: { type: "inline" } }] }, "$.files[0].data"],
+    ["shell", { ...validMessageData("shell", "msg_bad"), output: { output: 42, cursor: 0, size: 0, truncated: false } }, "$.output.output"],
+    ["assistant", {
+      ...validMessageData("assistant", "msg_bad"),
+      content: [{
+        type: "tool", id: "call", name: "read", time: { created: 1 },
+        state: { status: "completed", input: {}, content: [{ type: "file", uri: "file:///x" }] },
+      }],
+    }, "$.content[0].state.content[0].mime"],
+    ["compaction", { ...validMessageData("compaction", "msg_bad"), status: "failed", error: { type: "compact" } }, "$.error.message"],
+  ] as const;
+
+  for (const [type, data, path] of cases) {
+    const fixture = openCodeV2Fixture();
+    try {
+      fixture.addMessage(type, data, "msg_bad");
+      const error = failure(fixture.database);
+      assert(error instanceof SourceSchemaError);
+      assert.equal(error.reason, "malformed-message-payload");
+      assert.equal(error.messageID, "msg_bad");
+      assert.equal(error.messageType, type);
+      assert.equal(error.path, path);
+    } finally {
+      fixture.database.close();
+    }
+  }
+});
+
+test("rejects mismatched required root identity before publishing a source", () => {
+  const fixture = openCodeV2Fixture();
+  try {
+    fixture.addMessage("system", { id: "msg_other", type: "system", text: "hidden", time: { created: 1 } }, "msg_row");
+    const error = failure(fixture.database);
+    assert(error instanceof SourceSchemaError);
+    assert.equal(error.reason, "malformed-message-payload");
+    assert.equal(error.messageID, "msg_row");
+    assert.equal(error.messageType, "system");
+    assert.equal(error.path, "$.id");
+  } finally {
+    fixture.database.close();
   }
 });
 

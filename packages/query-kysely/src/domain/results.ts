@@ -1,7 +1,7 @@
 import type { DocumentAddress, SessionAddress, Target } from "./address.ts";
 import type { WitnessName } from "../direct/witness.ts";
 import type { DocumentField } from "./address.ts";
-import type { ProjectionRevision } from "./observation.ts";
+import type { Observation } from "./observation.ts";
 
 export interface Located<A extends import("./address.ts").Address, V> {
   readonly target: Target<A>;
@@ -11,10 +11,9 @@ export interface Located<A extends import("./address.ts").Address, V> {
 export interface DirectEvidence {
   readonly kind: "direct";
   readonly witness: WitnessName;
-  readonly document: Located<DocumentAddress, {
+  readonly document: Observation<DocumentAddress, {
     readonly field: DocumentField;
     readonly excerpt: string;
-    readonly revision?: ProjectionRevision;
   }>;
 }
 

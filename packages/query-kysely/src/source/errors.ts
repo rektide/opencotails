@@ -6,6 +6,7 @@ export const SourceSchemaReason = Schema.Literals([
   "incomplete-optional-layout",
   "missing-columns",
   "malformed-message-data",
+  "malformed-message-payload",
   "inspection-failed",
 ]);
 export type SourceSchemaReason = typeof SourceSchemaReason.Type;
@@ -17,6 +18,9 @@ export class SourceSchemaError extends Schema.TaggedErrorClass<SourceSchemaError
     message: Schema.String,
     table: Schema.NullOr(Schema.String),
     missingColumns: Schema.Array(Schema.String),
+    messageID: Schema.NullOr(Schema.String),
+    messageType: Schema.NullOr(Schema.String),
+    path: Schema.NullOr(Schema.String),
   },
 ) {}
 

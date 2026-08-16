@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function queryFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-query-"));
@@ -19,10 +19,6 @@ async function queryFixture(): Promise<{ readonly directory: string; readonly pa
     ) values
       ('ses_a', 'prj_a', 'a', '/a', 'Alpha', '2', 0, 0, 0, 0, 0, 0, 1, 10),
       ('ses_b', 'prj_b', 'b', '/b', 'Beta', '2', 0, 0, 0, 0, 0, 0, 2, 20);
-    insert into session_message values
-      ('msg_a2', 'ses_a', 'user', 2, 2, 2, '{"text":"a"}'),
-      ('msg_a9', 'ses_a', 'assistant', 9, 9, 9, '{"content":[]}'),
-      ('msg_b5', 'ses_b', 'system', 5, 5, 5, '{"text":"b"}');
     create table session (id text);
     create table message (id text, session_id text, seq integer);
     create table part (id text);
@@ -30,6 +26,12 @@ async function queryFixture(): Promise<{ readonly directory: string; readonly pa
     insert into message values ('msg_v1', 'ses_v1', 3);
     insert into part values ('part_v1');
   `);
+  const insert = fixture.database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)");
+  for (const [id, session, type, seq, text] of [
+    ["msg_a2", "ses_a", "user", 2, "a"], ["msg_a9", "ses_a", "assistant", 9, undefined],
+    ["msg_b5", "ses_b", "system", 5, "b"],
+  ] as const) insert.run(id, session, type, seq, seq, seq,
+    JSON.stringify({ ...validMessageData(type, id, seq), ...(text === undefined ? {} : { text }) }));
   fixture.completeMigration();
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();

@@ -8,7 +8,7 @@ import { literal } from "../src/direct/match.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function witnessFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-witness-"));
@@ -21,11 +21,14 @@ async function witnessFixture(): Promise<{ readonly directory: string; readonly 
     values
       ('ses_separate', 'prj', 's', '/s', null, '2', 1, 1),
       ('ses_same', 'prj', 'm', '/m', null, '2', 2, 2);
-    insert into session_message values
-      ('msg_s0', 'ses_separate', 'user', 0, 1, 1, '{"text":"alpha"}'),
-      ('msg_s1', 'ses_separate', 'system', 1, 2, 2, '{"text":"beta"}'),
-      ('msg_m0', 'ses_same', 'user', 0, 1, 1, '{"text":"alpha beta"}');
   `);
+  const insert = fixture.database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)");
+  for (const [id, session, type, seq, created, text] of [
+    ["msg_s0", "ses_separate", "user", 0, 1, "alpha"],
+    ["msg_s1", "ses_separate", "system", 1, 2, "beta"],
+    ["msg_m0", "ses_same", "user", 0, 1, "alpha beta"],
+  ] as const) insert.run(id, session, type, seq, created, created,
+    JSON.stringify({ ...validMessageData(type, id, created), text }));
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
   return { directory, path };

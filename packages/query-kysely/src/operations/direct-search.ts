@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { sql } from "kysely";
 import type { DocumentWitness, WitnessName } from "../direct/witness.ts";
@@ -12,7 +13,7 @@ import {
   sourceKey,
   target,
 } from "../domain/address.ts";
-import { projectionRevision } from "../domain/observation.ts";
+import { observation, projectionRevision } from "../domain/observation.ts";
 import type {
   DirectEvidence,
   GroupedSession,
@@ -45,6 +46,7 @@ interface SearchRow extends DocumentRelation {
   readonly witnessOrder: number | null;
   readonly sessionRank: number | null;
   readonly sessionTotal: number | null;
+  readonly sourceJSON: string | null;
 }
 
 const documentColumns = [
@@ -77,9 +79,24 @@ function validate(request: DirectSessionSearch): void {
   }
 }
 
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function payloadHash(sourceJSON: string): string {
+  return createHash("sha256").update(canonical(JSON.parse(sourceJSON))).digest("hex");
+}
+
 function decodeRows(
   rows: readonly SearchRow[],
   request: DirectSessionSearch,
+  observedAt: number,
+  sourceSnapshot: string,
 ): readonly GroupedSession<DirectEvidence>[] {
   const groups = new Map<string, {
     session: GroupedSession<DirectEvidence>["session"];
@@ -111,19 +128,24 @@ function decodeRows(
     }
     if (!request.evidence || row.witnessName === null || row.sessionRank === null) continue;
     const documentTarget = mapDocumentTarget(sourceKey(row.sourceID), row);
-    const revision = row.messageUpdatedAt === null
+    if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON === null)) {
+      throw new RowDecodeError("Message-owned evidence has no source revision", row.documentKey);
+    }
+    const revision = row.messageID === null
       ? undefined
-      : projectionRevision(row.messageUpdatedAt, row.documentKey);
+      : projectionRevision(row.messageUpdatedAt!, payloadHash(row.sourceJSON!));
     group.children.push(Object.freeze({
       kind: "direct",
       witness: row.witnessName as WitnessName,
-      document: Object.freeze({
+      document: observation({
         target: documentTarget,
         value: Object.freeze({
           field: row.field,
           excerpt: row.text.slice(0, excerptLength),
-          ...(revision === undefined ? {} : { revision }),
         }),
+        observedAt,
+        sourceSnapshot,
+        ...(revision === undefined ? {} : { revision }),
       }),
     }));
   }
@@ -140,6 +162,8 @@ export function searchDirectSessions(
   request: DirectSessionSearch,
 ): Effect.Effect<readonly GroupedSession<DirectEvidence>[], DirectSearchError> {
   validate(request);
+  const observedAt = Date.now();
+  const sourceSnapshot = `direct:${randomUUID()}`;
 
   return query.run(({ db, source }) => db
     .with("qualified_sessions", (qb) => {
@@ -182,6 +206,9 @@ export function searchDirectSessions(
       const branch = (witness: DocumentWitness, witnessOrder: number) => qb
         .selectFrom("cotail_document")
         .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_document.sessionID")
+        .leftJoin("cotail_message as evidence_message", (join) => join
+          .onRef("evidence_message.sessionID", "=", "cotail_document.sessionID")
+          .onRef("evidence_message.messageID", "=", "cotail_document.messageID"))
         .where(witness.matches)
         .select([
           ...documentColumns.map((column) => `cotail_document.${column}` as const),
@@ -192,6 +219,7 @@ export function searchDirectSessions(
           "qualified_sessions.sessionCreatedAt",
           "qualified_sessions.sessionUpdatedAt",
           "qualified_sessions.sourceID",
+          "evidence_message.sourceJSON",
           sql<string>`${witness.name}`.as("witnessName"),
           sql<number>`${witnessOrder}`.as("witnessOrder"),
         ]);
@@ -241,6 +269,7 @@ export function searchDirectSessions(
       "session_hits.witnessOrder",
       "session_hits.sessionRank",
       "session_hits.sessionTotal",
+      "session_hits.sourceJSON",
     ])
     .orderBy("qualified_sessions.sessionUpdatedAt", "desc")
     .orderBy("qualified_sessions.sessionID", "desc")
@@ -248,7 +277,7 @@ export function searchDirectSessions(
     .orderBy("session_hits.documentKey"),
   ).pipe(
     Effect.flatMap((rows) => Effect.try({
-      try: () => decodeRows(rows as unknown as readonly SearchRow[], request),
+      try: () => decodeRows(rows as unknown as readonly SearchRow[], request, observedAt, sourceSnapshot),
       catch: (cause) => cause instanceof RowDecodeError
         ? cause
         : new RowDecodeError(cause instanceof Error ? cause.message : String(cause), null),

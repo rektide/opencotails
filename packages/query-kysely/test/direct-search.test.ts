@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +10,7 @@ import { sessionDirectoryExact } from "../src/direct/session.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function searchFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-search-"));
@@ -23,15 +24,18 @@ async function searchFixture(): Promise<{ readonly directory: string; readonly p
       ('ses_a', 'prj', 'a', '/a', 'A', '2', 1, 10),
       ('ses_b', 'prj', 'b', '/b', 'B', '2', 2, 20),
       ('ses_c', 'prj', 'c', '/c', 'C', '2', 3, 20);
-    insert into session_message values
-      ('msg_a0', 'ses_a', 'user', 0, 1, 1, '{"text":"alpha"}'),
-      ('msg_a1', 'ses_a', 'system', 1, 2, 2, '{"text":"beta"}'),
-      ('msg_b0', 'ses_b', 'user', 0, 1, 11, '{"text":"alpha beta"}'),
-      ('msg_b1', 'ses_b', 'system', 1, 2, 12, '{"text":"alpha one"}'),
-      ('msg_b2', 'ses_b', 'synthetic', 2, 3, 13, '{"text":"alpha two"}'),
-      ('msg_c0', 'ses_c', 'user', 0, 1, 21, '{"text":"alpha"}'),
-      ('msg_c1', 'ses_c', 'system', 1, 2, 22, '{"text":"beta"}');
   `);
+  const insert = fixture.database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)");
+  for (const [id, session, type, seq, created, updated, text] of [
+    ["msg_a0", "ses_a", "user", 0, 1, 1, "alpha"],
+    ["msg_a1", "ses_a", "system", 1, 2, 2, "beta"],
+    ["msg_b0", "ses_b", "user", 0, 1, 11, "alpha beta"],
+    ["msg_b1", "ses_b", "system", 1, 2, 12, "alpha one"],
+    ["msg_b2", "ses_b", "synthetic", 2, 3, 13, "alpha two"],
+    ["msg_c0", "ses_c", "user", 0, 1, 21, "alpha"],
+    ["msg_c1", "ses_c", "system", 1, 2, 22, "beta"],
+  ] as const) insert.run(id, session, type, seq, created, updated,
+    JSON.stringify({ ...validMessageData(type, id, created), text }));
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
   return { directory, path };
@@ -64,8 +68,35 @@ test("groups independent witnesses with per-Session limits and stable evidence",
     assert.deepEqual(result[0]!.children.map((child) => child.witness), ["alpha", "beta"]);
     assert.equal(result[0]!.children[0]!.document.value.field, "user.text");
     assert.equal(result[0]!.children[0]!.document.value.excerpt, "alpha");
-    assert.equal(result[0]!.children[0]!.document.value.revision?.messageUpdatedAt, 21);
+    const evidence = result.flatMap((group) => group.children);
+    assert.equal(evidence[0]!.document.revision?.messageUpdatedAt, 21);
+    assert.match(evidence[0]!.document.revision?.payloadHash ?? "", /^[a-f0-9]{64}$/);
+    assert.equal(evidence[0]!.document.revision?.payloadHash, createHash("sha256")
+      .update('{"id":"msg_c0","text":"alpha","time":{"created":1},"type":"user"}').digest("hex"));
+    assert.notEqual(evidence[0]!.document.revision?.payloadHash, JSON.stringify(evidence[0]!.document.target.address));
+    assert.ok(Number.isSafeInteger(evidence[0]!.document.observedAt));
+    assert.equal(new Set(evidence.map((child) => child.document.observedAt)).size, 1);
+    assert.equal(new Set(evidence.map((child) => child.document.sourceSnapshot)).size, 1);
+    assert.equal("revision" in evidence[0]!.document.value, false);
     assert.equal(result[1]!.truncated, true);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("Session-title evidence is observed without inventing a Message revision", async () => {
+  const fixture = await searchFixture();
+  try {
+    const title = documentWitness(witnessName("title"), (eb) => literal(eb.ref("text"), "C"));
+    const result = await runSearch(fixture.path, {
+      witnesses: [title], evidence: true,
+      window: { sessions: { first: 1 }, childrenPerSession: 1 },
+    });
+    const document = result[0]!.children[0]!.document;
+    assert.equal(document.value.field, "session.title");
+    assert.equal(document.revision, undefined);
+    assert.ok(document.observedAt > 0);
+    assert.match(document.sourceSnapshot, /^direct:/);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

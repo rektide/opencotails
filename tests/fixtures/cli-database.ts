@@ -66,7 +66,9 @@ export function createCliDatabase(path: string): void {
   session.run("ses_other_abcdefghijkl", "project-b", "ses_newest_abcdefghijkl", "other", "/work/beta", "Other", "1", 3000, 3000);
 
   const message = db.prepare("INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)");
-  message.run("m-new", "ses_newest_abcdefghijkl", "assistant", 0, 4500, 4600, JSON.stringify({
+  message.run("msg_new", "ses_newest_abcdefghijkl", "assistant", 0, 4500, 4600, JSON.stringify({
+    id: "msg_new",
+    type: "assistant",
     agent: "build",
     model: { id: "fixture", providerID: "fixture" },
     content: [
@@ -83,10 +85,14 @@ export function createCliDatabase(path: string): void {
         time: { created: 4500, completed: 4600 },
       },
     ],
+    time: { created: 4500, completed: 4600 },
   }));
-  message.run("m-split-a", "ses_split_abcdefghijkl", "user", 0, 2500, 2500, JSON.stringify({ text: "alpha only" }));
-  message.run("m-split-b", "ses_split_abcdefghijkl", "user", 1, 3500, 3500, JSON.stringify({ text: "beta only" }));
-  message.run("m-other", "ses_other_abcdefghijkl", "user", 0, 3000, 3000, JSON.stringify({ text: "alpha beta other" }));
+  message.run("msg_split_a", "ses_split_abcdefghijkl", "user", 0, 2500, 2500,
+    JSON.stringify({ id: "msg_split_a", type: "user", text: "alpha only", time: { created: 2500 } }));
+  message.run("msg_split_b", "ses_split_abcdefghijkl", "user", 1, 3500, 3500,
+    JSON.stringify({ id: "msg_split_b", type: "user", text: "beta only", time: { created: 3500 } }));
+  message.run("msg_other", "ses_other_abcdefghijkl", "user", 0, 3000, 3000,
+    JSON.stringify({ id: "msg_other", type: "user", text: "alpha beta other", time: { created: 3000 } }));
 
   db.prepare("INSERT INTO kv VALUES ('migration.v1-v2', ?, 1, 1)")
     .run(JSON.stringify({ phase: "completed" }));

@@ -43,6 +43,26 @@ export interface OpenCodeV2Fixture {
   readonly addEvent: (id?: string) => void;
 }
 
+export function validMessageData(type: string, id: string, created = 1): Record<string, unknown> {
+  const base = { id, type, time: { created } };
+  switch (type) {
+    case "agent-switched": return { ...base, agent: "build" };
+    case "model-switched": return { ...base, model: { id: "fixture", providerID: "fixture" } };
+    case "user": return { ...base, text: "fixture user" };
+    case "synthetic": return { ...base, text: "fixture synthetic" };
+    case "system": return { ...base, text: "fixture system" };
+    case "skill": return { ...base, skill: "fixture", name: "fixture", text: "fixture skill" };
+    case "shell": return { ...base, shellID: "sh_fixture", command: "true", status: "exited" };
+    case "assistant": return {
+      ...base, agent: "build", model: { id: "fixture", providerID: "fixture" }, content: [],
+    };
+    case "compaction": return {
+      ...base, status: "completed", reason: "auto", summary: "fixture summary", recent: "fixture recent",
+    };
+    default: return base;
+  }
+}
+
 export function openCodeV2Fixture(options: {
   readonly events?: boolean;
   readonly pendingInput?: boolean;
@@ -77,9 +97,9 @@ export function openCodeV2Fixture(options: {
     database.exec("create table if not exists session (id text)");
     database.prepare("insert into session values (?)").run(id);
   };
-  const addMessage = (type: string, data: unknown = {}, id = `msg_${messageSequence}`) => {
+  const addMessage = (type: string, data: unknown = undefined, id = `msg_${messageSequence}`) => {
     database.prepare("insert into session_message values (?, 'ses_fixture', ?, ?, 1, 1, ?)")
-      .run(id, type, messageSequence++, typeof data === "string" ? data : JSON.stringify(data));
+      .run(id, type, messageSequence++, typeof data === "string" ? data : JSON.stringify(data ?? validMessageData(type, id)));
   };
   const completeMigration = () => {
     database.prepare("insert or replace into kv values ('migration.v1-v2', ?, 1, 1)")
