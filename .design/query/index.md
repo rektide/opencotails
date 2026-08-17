@@ -2,17 +2,23 @@
 
 ## Start Here
 
+- [`design3.gpt56.md`](/query/design3.gpt56.md) - Implemented V2 relational query
+  direction: public logical Kysely relations, hierarchical identity, witnesses,
+  evidence, grouped products, and Effect-owned execution.
+- [Execution contract PRD](/.design/query2/design.md) - Active refinement of
+  provider-owned read scopes, provenance, transactions, streaming, failures,
+  lifecycle, safe tracing, and standalone/hosted conformance.
 - [`prompt1.gpt56.md`](/query/prompt1.gpt56.md) - Active design brief: V2-only,
   Kysely-forward shared library, Effect composition, multiple result grains, and
   an open identity/address-model challenge.
 - [`README.md`](/query/README.md) - Concise scope and navigation.
 
-## Current Design Candidate
+## Prior Design Candidate
 
 - [`design3-self.md`](/query/design3-self.md) - Direct answer to the active
-  prompt: public Kysely logical relations, Effect services, V2-only storage,
-  hierarchical Addresses, observations/evidence, multiple result grains, and
-  per-Session windows.
+  prompt preceding the implemented `design3.gpt56.md`: public Kysely logical
+  relations, Effect services, V2-only storage, hierarchical Addresses,
+  observations/evidence, multiple result grains, and per-Session windows.
 
 ## Active Research
 

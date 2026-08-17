@@ -1270,3 +1270,12 @@ Message/content/tool/shell/aggregate queries that the Session-only design could
 not express. The hard parts left are genuinely cotail's: source evolution,
 nested identity, evidence provenance, privacy, bookmark staleness, snapshots,
 and OpenCode transaction integration.
+
+## Execution Refinement
+
+[The query execution contract PRD](/.design/query2/design.md) narrows and deepens
+this design's remaining execution work. It distinguishes read-scope correlation
+from optional source revision, makes transaction and stream ownership explicit,
+defines capability-honest interruption and hosted behavior, and proposes the
+standalone contract/conformance delivery cuts. It does not replace this
+document's logical relation, identity, witness, evidence, or bookmark model.

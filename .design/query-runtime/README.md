@@ -13,3 +13,7 @@ for the accepted technical design and executable tracer.
 
 See [the index](/.design/query-runtime/index.md) for progressive disclosure and
 [the log](/.design/query-runtime/log.md) for changes.
+
+[The query execution contract PRD](/.design/query2/design.md) defines the
+adjacent per-read seam. Registry scope may acquire a query provider; it does not
+own each operation's connection lease, transaction, provenance, or stream.

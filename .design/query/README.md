@@ -3,13 +3,17 @@
 This directory contains cotail's session-selection, content-qualification,
 witness/evidence, storage-authority, and future indexing design.
 
-Start with [`prompt1.gpt56.md`](/query/prompt1.gpt56.md). It is the active design
-brief for a V2-only, Kysely-forward, Effect-composed CLI and reusable query
-library. No replacement design has been accepted yet.
+Start with [`design3.gpt56.md`](/query/design3.gpt56.md). Its V2-only public
+Kysely world, logical relations, Address/Target model, witnesses, evidence, and
+Effect-scoped standalone execution are now the implemented direction.
 
-[`design3-self.md`](/query/design3-self.md) is the first direct answer to that
-brief. It proposes an addressed logical Kysely query world and is a draft for
-evaluation, not yet an accepted design.
+Then read [the query execution contract PRD](/.design/query2/design.md) for the
+active refinement of read scopes, transactions, provenance, streaming,
+interruption, lifecycle, provider conformance, and hosted execution.
+
+[`prompt1.gpt56.md`](/query/prompt1.gpt56.md) remains the brief that initiated
+this direction. [`design3-self.md`](/query/design3-self.md) is the earlier direct
+candidate retained as design lineage.
 
 [`design2.md`](/query/design2.md) is an unaccepted custom selector candidate now
 being challenged by the Kysely-forward direction. [`design1.md`](/query/design1.md)
@@ -26,8 +30,8 @@ Important evidence:
   audit; it is evidence, not the forward build design.
 
 Current implementation evidence remains useful, but it is distinct from the
-intended object model. The active prompt permits breaking changes, V2-only reads,
-multiple result grains, public Kysely composition, and Effect services.
+forward execution requirements. The execution PRD is deliberately narrower than
+the relational design and states which adjacent work it does not directly own.
 
 Use [`index.md`](/query/index.md) for progressive disclosure and
 [`log.md`](/query/log.md) for dated changes.

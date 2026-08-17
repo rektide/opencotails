@@ -1,5 +1,15 @@
 # Query Design Log
 
+## 2026-08-17
+
+- Added [the query execution contract PRD](/.design/query2/design.md), refining
+  the implemented V2 query world with provider-owned read scopes, explicit read
+  provenance, multi-statement consistency, scoped streaming, capability-honest
+  interruption, structured failures, safe tracing, and provider conformance.
+- Updated query navigation to distinguish the implemented
+  [`design3.gpt56.md`](/query/design3.gpt56.md) direction from the earlier
+  `design3-self` candidate.
+
 ## 2026-08-15
 
 - Added [`design3-self.md`](/query/design3-self.md), a direct answer to the active

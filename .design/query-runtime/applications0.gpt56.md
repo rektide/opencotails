@@ -577,3 +577,7 @@ lease-aware mutable registry as a different system.
 - [Apache Arrow output](/.design/output/arrow0.gpt56.md) is deliberately separate:
   output schemas consume query products and should not be registered as query
   providers.
+- [Query execution contract PRD](/.design/query2/design.md) defines the
+  provider-owned read scope beneath each registry-acquired world. Registry scope
+  owns provider acquisition; `LogicalRead` owns per-operation connection,
+  transaction, provenance, statement, and stream semantics.

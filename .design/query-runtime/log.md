@@ -1,5 +1,11 @@
 # Query Runtime Log
 
+## 2026-08-17
+
+- Cross-referenced [the query execution contract PRD](/.design/query2/design.md)
+  to distinguish registry/provider acquisition scope from each operation's
+  read-transaction, provenance, statement, and stream scope.
+
 ## 2026-08-16
 
 - Added the query registry applications explainer, documenting that the package
