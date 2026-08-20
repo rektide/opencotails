@@ -257,9 +257,9 @@ the source in this implementation and do not share provenance.
 
 `read-scope-busy` is an expected `QueryExecutionError` reason because a caller
 can respond by sequencing work or opening a separate scope. Use after closure
-is programmer misuse and may be represented as a distinct closed-scope error or
-an Effect defect. The implementation should choose the simpler form while tests
-assert that no native operation occurs after closure.
+is programmer misuse and dies with a `ReadScopeClosed` defect rather than
+polluting every query's checked error channel. Tests assert that the defect is
+observable and no native operation occurs after closure.
 
 ### What scoping does and does not guarantee
 
