@@ -5,9 +5,11 @@
 - [`design3.gpt56.md`](/query/design3.gpt56.md) - Implemented V2 relational query
   direction: public logical Kysely relations, hierarchical identity, witnesses,
   evidence, grouped products, and Effect-owned execution.
-- [Execution contract PRD](/.design/query2/design.md) - Active refinement of
-  provider-owned read scopes, provenance, transactions, streaming, failures,
-  lifecycle, safe tracing, and standalone/hosted conformance.
+- [Standalone query execution](/.design/query2/design2.gpt56.md) - Active
+  `node:sqlite` direction: scoped reads, truthful provenance, stable snapshots,
+  conventional Effect streaming, explain diagnostics, and direct migration.
+- [Original execution contract](/.design/query2/design.md) - Broader
+  standalone/hosted proposal retained as design lineage and alternatives.
 - [`prompt1.gpt56.md`](/query/prompt1.gpt56.md) - Active design brief: V2-only,
   Kysely-forward shared library, Effect composition, multiple result grains, and
   an open identity/address-model challenge.

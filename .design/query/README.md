@@ -7,9 +7,11 @@ Start with [`design3.gpt56.md`](/query/design3.gpt56.md). Its V2-only public
 Kysely world, logical relations, Address/Target model, witnesses, evidence, and
 Effect-scoped standalone execution are now the implemented direction.
 
-Then read [the query execution contract PRD](/.design/query2/design.md) for the
-active refinement of read scopes, transactions, provenance, streaming,
-interruption, lifecycle, provider conformance, and hosted execution.
+Then read [the standalone query execution design](/.design/query2/design2.gpt56.md)
+for the active refinement of `node:sqlite` read scopes, transactions,
+provenance, conventional Effect streaming, flexible diagnostics, and lifecycle.
+The [original execution contract](/.design/query2/design.md) remains as broader
+standalone/hosted design lineage.
 
 [`prompt1.gpt56.md`](/query/prompt1.gpt56.md) remains the brief that initiated
 this direction. [`design3-self.md`](/query/design3-self.md) is the earlier direct
@@ -30,8 +32,9 @@ Important evidence:
   audit; it is evidence, not the forward build design.
 
 Current implementation evidence remains useful, but it is distinct from the
-forward execution requirements. The execution PRD is deliberately narrower than
-the relational design and states which adjacent work it does not directly own.
+forward execution requirements. The execution design is deliberately narrower
+than the relational design and states which adjacent work it does not directly
+own.
 
 Use [`index.md`](/query/index.md) for progressive disclosure and
 [`log.md`](/query/log.md) for dated changes.

@@ -17,9 +17,10 @@
 
 - [V2 relational query world](/.design/query/design3.gpt56.md): defines what a
   production query factory acquires and which logical relations callers query.
-- [Query execution contract PRD](/.design/query2/design.md): defines the
-  provider-owned read scope beneath each operation and keeps transaction,
-  provenance, and stream lifetime outside registry responsibility.
+- [Standalone query execution](/.design/query2/design2.gpt56.md): defines the
+  `node:sqlite` read scope beneath each operation, avoids a speculative provider
+  abstraction, and keeps transaction, provenance, and stream lifetime outside
+  registry responsibility.
 - [Earlier addressed query candidate](/.design/query/design3-self.md): retained
   as design lineage preceding the implemented V2 world.
 - [OpenCode V2 model and integration](/.design/query/opencode-v2-model0.general.md):

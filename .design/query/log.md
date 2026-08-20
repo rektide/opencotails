@@ -1,5 +1,16 @@
 # Query Design Log
 
+## 2026-08-20
+
+- Added [the standalone query execution design](/.design/query2/design2.gpt56.md),
+  choosing `node:sqlite` over a hypothetical OpenCode host adapter, conventional
+  Effect scope discipline over structural non-escape claims, permissive explain
+  and local diagnostics, compiler-level readonly results, and direct breaking
+  migration. The revision resolves, defers, removes, or evidence-gates every
+  open decision from the original execution PRD.
+- Updated query and runtime navigation to retain the broader
+  [original execution contract](/.design/query2/design.md) as design lineage.
+
 ## 2026-08-17
 
 - Added [the query execution contract PRD](/.design/query2/design.md), refining
