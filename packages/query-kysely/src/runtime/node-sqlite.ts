@@ -221,8 +221,11 @@ function makeNodeLogicalQuery(input: {
       }),
       () => Effect.sync(() => {
         try {
-          hooks?.onAction("rollback");
-          native.exec("ROLLBACK");
+          try {
+            hooks?.onAction("rollback");
+          } finally {
+            native.exec("ROLLBACK");
+          }
         } finally {
           state = "closed";
         }

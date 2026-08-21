@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { Cause, Effect, Exit, Fiber, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Stream } from "effect";
 import type { AnyLogicalSelect } from "../src/query/logical-query.ts";
 import { all, stream } from "../src/query/logical-query.ts";
 import { QueryExecutionError } from "../src/query/errors.ts";
@@ -110,25 +110,33 @@ test("statement state rejects overlap, releases after streams, and detects close
                 : Effect.void),
               Stream.runCollect,
             );
+            const empty = yield* read.stream(({ db }) => db.selectFrom("cotail_session")
+              .select("sessionID").where("sessionID", "=", "missing")).pipe(Stream.runCollect);
             const after = yield* read.all(({ db }) => db.selectFrom("cotail_session").select("sessionID"));
-            return { rows: Array.from(rows), after, overlap };
+            return { rows: Array.from(rows), empty: Array.from(empty), after, overlap };
           }))));
 
           const leaked = yield* Effect.scoped(query.openRead);
           const preparesBeforeClosedUse = actions.filter((action) => action === "prepare").length;
           const closedExit = yield* Effect.exit(leaked.all(({ db }) =>
             db.selectFrom("cotail_session").select("sessionID")));
+          const leakedStream = yield* Effect.scoped(query.openRead.pipe(Effect.map((read) =>
+            read.stream(({ db }) => db.selectFrom("cotail_session").select("sessionID")))));
+          const leakedStreamExit = yield* Effect.exit(Stream.runCollect(leakedStream));
           const closedPrepareCount = actions.filter((action) => action === "prepare").length - preparesBeforeClosedUse;
-          return { readResult, closedExit, closedPrepareCount };
+          return { readResult, closedExit, leakedStreamExit, closedPrepareCount };
         })),
       ),
     ));
 
     assert.ok(result.readResult.rows.length > 0);
+    assert.deepEqual(result.readResult.empty, []);
     assert.ok(result.readResult.after.length > 0);
     assert.equal(result.readResult.overlap?.reason, "read-scope-busy");
     assert(Exit.isFailure(result.closedExit));
     assert(Cause.squash(result.closedExit.cause) instanceof ReadScopeClosed);
+    assert(Exit.isFailure(result.leakedStreamExit));
+    assert(Cause.squash(result.leakedStreamExit.cause) instanceof ReadScopeClosed);
     assert.equal(result.closedPrepareCount, 0);
   } finally {
     fixture.writer.close();
@@ -144,7 +152,9 @@ test("raw writes fail with retained SQLite context and the scope remains usable"
         Effect.flatMap(({ query }) => query.openRead.pipe(Effect.flatMap((read) => Effect.gen(function*() {
           const failure = yield* read.all(() => ({
             compile: () => ({
-              sql: "update session_v2 set title = 'mutated' where id = 'ses_scope' returning id",
+              sql: `with selected(id) as (select 'ses_scope')
+                update session_v2 set title = 'mutated'
+                where id in (select id from selected) returning id`,
               parameters: [],
             }),
           }) as unknown as AnyLogicalSelect).pipe(Effect.flip);
@@ -179,12 +189,14 @@ test("scope-owning stream closes its read after early termination", async () => 
         Effect.flatMap(({ query }) => Effect.gen(function*() {
           const first = yield* stream(query, ({ db }) => db.selectFrom("cotail_session")
             .select("sessionID").orderBy("sessionID")).pipe(Stream.take(1), Stream.runCollect);
+          const firstStepCount = actions.filter((action) => action === "step").length;
           const after = yield* all(query, ({ db }) => db.selectFrom("cotail_session").select("sessionID"));
-          return { first: Array.from(first), after };
+          return { first: Array.from(first), firstStepCount, after };
         })),
       ),
     ));
     assert.equal(result.first.length, 1);
+    assert.equal(result.firstStepCount, 1);
     assert.ok(result.after.length > 0);
     assert.equal(actions.filter((action) => action === "iterator-return").length, 1);
     assert.equal(actions.at(-1), "close");
@@ -196,15 +208,28 @@ test("scope-owning stream closes its read after early termination", async () => 
 
 test("waiting read interruption does not strand the source lease", async () => {
   const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
   try {
     const rows = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "interrupt" }).pipe(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "interrupt" },
+        (action) => actions.push(action),
+      ).pipe(
         Effect.flatMap(({ query }) => Effect.gen(function*() {
           yield* Effect.scoped(query.openRead.pipe(Effect.flatMap(() => Effect.gen(function*() {
             const waiting = yield* Effect.forkChild(Effect.scoped(query.openRead));
             yield* Effect.yieldNow;
             yield* Fiber.interrupt(waiting);
           }))));
+          const beginCount = actions.filter((action) => action === "begin").length;
+          const concurrentBegins = yield* Effect.scoped(query.openRead.pipe(Effect.flatMap(() => Effect.gen(function*() {
+            const waiting = yield* Effect.forkChild(Effect.scoped(query.openRead));
+            yield* Effect.yieldNow;
+            const count = actions.filter((action) => action === "begin").length - beginCount;
+            yield* Fiber.interrupt(waiting);
+            return count;
+          }))));
+          assert.equal(concurrentBegins, 1);
           return yield* all(query, ({ db }) => db.selectFrom("cotail_session").select("sessionID"));
         })),
       ),
@@ -269,6 +294,37 @@ test("pin failure rolls back, releases the lease, and mints no failed provenance
     assert.equal(result.failure.phase, "pin");
     assert.ok(result.successful.readScopeID.length > 0);
     assert.deepEqual(actions.slice(0, 4), ["begin", "pin", "rollback", "begin"]);
+  } finally {
+    fixture.writer.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("stream interruption between pulls closes the iterator and read scope", async () => {
+  const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
+  try {
+    const rows = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "stream-interrupt" },
+        (action) => actions.push(action),
+      ).pipe(Effect.flatMap(({ query }) => Effect.gen(function*() {
+        const pulled = yield* Deferred.make<void>();
+        const consuming = yield* Effect.forkChild(stream(query, ({ db }) => db.selectFrom("cotail_session")
+          .select("sessionID")).pipe(
+            Stream.tap(() => Effect.gen(function*() {
+              yield* Deferred.succeed(pulled, undefined);
+              yield* Effect.never;
+            })),
+            Stream.runDrain,
+          ));
+        yield* Deferred.await(pulled);
+        yield* Fiber.interrupt(consuming);
+        return yield* all(query, ({ db }) => db.selectFrom("cotail_session").select("sessionID"));
+      }))),
+    ));
+    assert.equal(actions.filter((action) => action === "iterator-return").length, 1);
+    assert.ok(rows.length > 0);
   } finally {
     fixture.writer.close();
     await rm(fixture.directory, { recursive: true, force: true });
