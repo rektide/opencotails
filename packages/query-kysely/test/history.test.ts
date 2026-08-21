@@ -23,7 +23,8 @@ async function historyFixture(): Promise<{ readonly directory: string; readonly 
     values
       ('ses_a', 'p1', 'a', '/work/a', 'A', '2', 1, 10),
       ('ses_b', 'p1', 'b', '/work/b', 'B', '2', 2, 20),
-      ('ses_c', 'p2', 'c', '/other/c', 'C', '2', 3, 20);
+      ('ses_c', 'p2', 'c', '/other/c', 'C', '2', 3, 20),
+      ('ses_old', 'p1', 'old', '/work/old', 'Old', '2', 1, 5);
     create table session (id text);
     create table message (id text, session_id text, time_created integer);
     insert into session values ('ses_legacy');
@@ -35,6 +36,7 @@ async function historyFixture(): Promise<{ readonly directory: string; readonly 
     ["msg_synthetic", "ses_b", "synthetic", 2, 3], ["msg_system", "ses_b", "system", 3, 4],
     ["msg_skill", "ses_b", "skill", 4, 5], ["msg_shell", "ses_b", "shell", 5, 6],
     ["msg_compaction", "ses_b", "compaction", 6, 7], ["msg_c", "ses_c", "user", 0, 8],
+    ["msg_old_a", "ses_old", "user", 0, 1], ["msg_old_b", "ses_old", "user", 1, 6],
   ] as const) insert.run(id, session, type, seq, time, time, JSON.stringify(validMessageData(type, id, time)));
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
@@ -72,6 +74,9 @@ test("returns canonical Session observations with one-pass activity counts per v
       ["ses_b", { since: 5, messagesTotal: 7, messagesSince: 3 }],
     ]);
     assert.equal(rows.some((row) => idOf(row) === "ses_legacy"), false);
+    // A Session outside the predicate keeps its Messages out of the listing and
+    // out of every qualified Session's counts.
+    assert.equal(rows.some((row) => idOf(row) === "ses_old"), false);
 
     const tighter = await history(fixture.path, { since: 6 });
     const sesB = tighter.find((row) => idOf(row) === "ses_b");
@@ -88,8 +93,9 @@ test("orders ties deterministically, keeps zero-message Sessions, and applies li
       history(fixture.path, { since: 0 }),
       history(fixture.path, { since: 0, limit: 1 }),
     ]);
-    assert.deepEqual(unlimited.map(idOf), ["ses_c", "ses_b", "ses_a"]);
+    assert.deepEqual(unlimited.map(idOf), ["ses_c", "ses_b", "ses_a", "ses_old"]);
     assert.deepEqual(unlimited[2]!.activity, { since: 0, messagesTotal: 0, messagesSince: 0 });
+    assert.deepEqual(unlimited[3]!.activity, { since: 0, messagesTotal: 2, messagesSince: 2 });
     assert.deepEqual(one.map(idOf), ["ses_c"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
@@ -123,7 +129,7 @@ test("rejects invalid limits and cutoffs before opening a read", () => {
   }
 });
 
-test("compiles one grouped Message aggregate joined once, with no correlated counts", async () => {
+test("qualifies Sessions first and restricts the one grouped Message aggregate to them", async () => {
   const fixture = await historyFixture();
   try {
     const request = {
@@ -141,18 +147,64 @@ test("compiles one grouped Message aggregate joined once, with no correlated cou
       ),
     ));
 
+    const qualifiedAt = compiled.sql.indexOf(', "qualified_sessions" as (');
+    const activityAt = compiled.sql.indexOf(', "session_activity" as (');
+    const mainAt = compiled.sql.indexOf(') select "cotail_session"."sessionID"');
+    assert.ok(qualifiedAt > 0 && activityAt > qualifiedAt && mainAt > activityAt);
+    const qualified = compiled.sql.slice(qualifiedAt, activityAt);
+    const activity = compiled.sql.slice(activityAt, mainAt);
+    const main = compiled.sql.slice(mainAt);
+
+    // The predicate, deterministic order, and limit qualify Sessions before any
+    // Message work happens; the predicate parameter precedes the limit.
+    assert.match(qualified, /where "cotail_session"\."updatedAt" >= \?/);
+    assert.match(
+      qualified,
+      /order by "cotail_session"\."updatedAt" desc, "cotail_session"\."sessionID" desc/,
+    );
+    assert.match(qualified, /limit \?\)$/);
+
+    // Exactly one grouped aggregate, and it inner-joins the qualified Sessions
+    // before grouping, so Messages of non-qualified Sessions are never grouped.
     assert.equal((compiled.sql.match(/count\(\*\)/g) ?? []).length, 1);
     assert.equal((compiled.sql.match(/group by/g) ?? []).length, 1);
-    assert.match(compiled.sql, /group by "cotail_message"\."sessionID"/);
-    assert.match(compiled.sql, /left join \(\s*select/);
-    assert.match(compiled.sql, /case when "cotail_message"\."createdAt" >= \?/);
+    assert.match(
+      activity,
+      /from "cotail_message" inner join "qualified_sessions" on "qualified_sessions"\."sessionID" = "cotail_message"\."sessionID"/,
+    );
+    assert.match(activity, /sum\(case when "cotail_message"\."createdAt" >= \? then 1 else 0 end\)/);
+    assert.match(activity, /group by "cotail_message"\."sessionID"$/);
+    assert.doesNotMatch(activity, /left join/);
+
+    // Counts join back left so zero-message qualified Sessions survive.
+    assert.match(main, /inner join "qualified_sessions"/);
+    assert.match(main, /left join "session_activity"/);
+    assert.match(main, /coalesce\("session_activity"\."messagesTotal", 0\)/);
+    assert.match(main, /coalesce\("session_activity"\."messagesSince", 0\)/);
     assert.doesNotMatch(compiled.sql, /\(select count/);
     assert.doesNotMatch(compiled.sql, /coalesce\(\(select/);
-    assert.deepEqual(compiled.parameters, [5, 15, 2]);
+    assert.deepEqual(compiled.parameters, [15, 2, 5]);
 
+    // Plan evidence: one group-by over a qualified-Sessions-restricted scan, no
+    // correlated scalar subqueries, and qualified Sessions materialized once.
     const details = plan.map((row) => row.detail);
     assert.equal(details.filter((detail) => detail.includes("USE TEMP B-TREE FOR GROUP BY")).length, 1);
     assert.equal(details.some((detail) => detail.includes("SCALAR SUBQUERY")), false);
+    assert.equal(details.filter((detail) => detail.includes("MATERIALIZE qualified_sessions")).length, 1);
+
+    const byId = new Map(plan.map((row) => [row.id, row]));
+    const groupByRow = plan.find((row) => row.detail.includes("USE TEMP B-TREE FOR GROUP BY"));
+    assert.ok(groupByRow !== undefined);
+    let aggregateRoot = groupByRow;
+    while (byId.get(aggregateRoot.parent) !== undefined) aggregateRoot = byId.get(aggregateRoot.parent)!;
+    const inAggregate = (row: typeof plan[number]): boolean =>
+      row.id === aggregateRoot.id
+      || (byId.get(row.parent) !== undefined && inAggregate(byId.get(row.parent)!));
+    const aggregateSubtree = plan.filter(inAggregate);
+    assert.ok(aggregateSubtree.length > 1);
+    // The grouped scan itself probes qualified Sessions rather than grouping
+    // the Message relation on its own.
+    assert.equal(aggregateSubtree.some((row) => row.detail.includes("qualified_sessions")), true);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

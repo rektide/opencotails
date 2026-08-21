@@ -8,7 +8,7 @@ import type { SessionReportObservation } from "../domain/session-report.ts";
 import type { CotailRelations } from "../relations/schema.ts";
 import {
   decodeSessionReport,
-  sessionReportQuery,
+  sessionReportColumns,
   SessionReportDecodeError,
   type SessionReportRow,
 } from "./session-report.ts";
@@ -52,33 +52,45 @@ function validateSessionHistoryRequest(request: SessionHistoryRequest): void {
 }
 
 /**
- * The sole history selection: the canonical Session report projection joined
- * once to one grouped `cotail_message` aggregate. Both activity counters come
- * from that single aggregate; there are no correlated count subqueries.
+ * The sole history selection. Sessions are qualified first — predicate,
+ * deterministic order, and optional limit — into one CTE. The single grouped
+ * `cotail_message` aggregate inner-joins those qualified Sessions before
+ * grouping, so it never groups Messages of unrelated Sessions. Counts are
+ * left-joined back so zero-message qualified Sessions survive. There are no
+ * correlated count subqueries.
  */
 export function sessionHistoryQuery(db: ReadonlyQueryCreator<CotailRelations>, request: SessionHistoryRequest) {
   validateSessionHistoryRequest(request);
-  let history = applySessionPredicate(sessionReportQuery(db), request.predicate)
-    .leftJoin(
-      (eb) => eb.selectFrom("cotail_message")
-        .select((count) => [
-          "cotail_message.sessionID",
-          count.fn.countAll<number>().as("messagesTotal"),
-          sql<number>`sum(case when ${count.ref("cotail_message.createdAt")} >= ${request.since} then 1 else 0 end)`
-            .as("messagesSince"),
-        ])
-        .groupBy("cotail_message.sessionID")
-        .as("session_activity"),
-      (join) => join.onRef("session_activity.sessionID", "=", "cotail_session.sessionID"),
-    )
-    .select((eb) => [
-      sql<number>`coalesce(${eb.ref("session_activity.messagesTotal")}, 0)`.as("messagesTotal"),
-      sql<number>`coalesce(${eb.ref("session_activity.messagesSince")}, 0)`.as("messagesSince"),
+  return db
+    .with("qualified_sessions", (qb) => {
+      let qualified = applySessionPredicate(
+        qb.selectFrom("cotail_session").select("cotail_session.sessionID"),
+        request.predicate,
+      )
+        .orderBy("cotail_session.updatedAt", "desc")
+        .orderBy("cotail_session.sessionID", "desc");
+      if (request.limit !== undefined) qualified = qualified.limit(request.limit);
+      return qualified;
+    })
+    .with("session_activity", (qb) => qb.selectFrom("cotail_message")
+      .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_message.sessionID")
+      .select((eb) => [
+        "cotail_message.sessionID",
+        eb.fn.countAll<number>().as("messagesTotal"),
+        sql<number>`sum(case when ${eb.ref("cotail_message.createdAt")} >= ${request.since} then 1 else 0 end)`
+          .as("messagesSince"),
+      ])
+      .groupBy("cotail_message.sessionID"))
+    .selectFrom("cotail_session")
+    .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_session.sessionID")
+    .leftJoin("session_activity", "session_activity.sessionID", "cotail_session.sessionID")
+    .select([
+      ...sessionReportColumns,
+      (eb) => sql<number>`coalesce(${eb.ref("session_activity.messagesTotal")}, 0)`.as("messagesTotal"),
+      (eb) => sql<number>`coalesce(${eb.ref("session_activity.messagesSince")}, 0)`.as("messagesSince"),
     ])
     .orderBy("cotail_session.updatedAt", "desc")
     .orderBy("cotail_session.sessionID", "desc");
-  if (request.limit !== undefined) history = history.limit(request.limit);
-  return history;
 }
 
 function countOf(row: HistoryRow, field: "messagesTotal" | "messagesSince"): number {
@@ -116,8 +128,8 @@ export function readSessionHistory(
   validateSessionHistoryRequest(request);
   return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) =>
     read.all(({ db }) => sessionHistoryQuery(db, request)).pipe(
-      // The raw count selects type as `number`, but a Session without Messages
-      // yields null from the outer join, so decode through the nullable row.
+      // Count columns come back coalesced, but decode through the nullable row
+      // view anyway so zero-message Sessions validate the same seam.
       Effect.flatMap((rows) => decodeHistoryRows(rows as readonly HistoryRow[], request.since, read.source, read.provenance)),
     ),
   )));

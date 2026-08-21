@@ -12,7 +12,8 @@ import { sessionID } from "../domain/identifier.ts";
 import type { SessionReportObservation } from "../domain/session-report.ts";
 import type { CotailRelations, SessionRelation } from "../relations/schema.ts";
 
-const sessionReportColumns = [
+/** The qualified base projection column list every canonical Session report selects. */
+export const sessionReportColumns = [
   "cotail_session.sessionID", "cotail_session.projectID", "cotail_session.workspaceID",
   "cotail_session.parentID", "cotail_session.forkSessionID", "cotail_session.forkBoundary",
   "cotail_session.slug", "cotail_session.directory", "cotail_session.path", "cotail_session.title",
