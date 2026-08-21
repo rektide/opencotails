@@ -6,7 +6,9 @@ import test from "node:test";
 import { Effect } from "effect";
 import { all } from "../src/query/logical-query.ts";
 import { sessionUpdatedRange } from "../src/direct/session.ts";
-import { readSessionHistory } from "../src/operations/history.ts";
+import { sessionID } from "../src/domain/identifier.ts";
+import { readSessionHistory, sessionHistoryQuery } from "../src/operations/history.ts";
+import { getSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
@@ -47,34 +49,110 @@ async function history(path: string, request: Parameters<typeof readSessionHisto
   ));
 }
 
-test("counts every V2 Message variant and keeps selection and count cutoffs distinct", async () => {
+async function withQuery<A>(path: string, run: (query: Parameters<typeof getSession>[0]) => Effect.Effect<A, unknown>) {
+  return Effect.runPromise(Effect.scoped(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+      Effect.flatMap(({ query }) => run(query)),
+    ),
+  ));
+}
+
+const idOf = (row: { readonly session: { readonly target: { readonly address: { readonly sessionID: string } } } }) =>
+  row.session.target.address.sessionID;
+
+test("returns canonical Session observations with one-pass activity counts per variant", async () => {
   const fixture = await historyFixture();
   try {
     const rows = await history(fixture.path, {
       predicate: sessionUpdatedRange({ from: 15 }),
-      countSince: 5,
-      limit: 0,
+      since: 5,
     });
-    assert.deepEqual(rows.map((row) => [row.id, row.messagesTotal, row.messagesRecent]), [
-      ["ses_c", 1, 1],
-      ["ses_b", 7, 3],
+    assert.deepEqual(rows.map((row) => [idOf(row), row.activity]), [
+      ["ses_c", { since: 5, messagesTotal: 1, messagesSince: 1 }],
+      ["ses_b", { since: 5, messagesTotal: 7, messagesSince: 3 }],
     ]);
-    assert.equal(rows.some((row) => row.id === "ses_legacy"), false);
+    assert.equal(rows.some((row) => idOf(row) === "ses_legacy"), false);
+
+    const tighter = await history(fixture.path, { since: 6 });
+    const sesB = tighter.find((row) => idOf(row) === "ses_b");
+    assert.deepEqual(sesB?.activity, { since: 6, messagesTotal: 7, messagesSince: 2 });
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });
 
-test("orders ties deterministically, supports zero-message rows, and treats zero as unlimited", async () => {
+test("orders ties deterministically, keeps zero-message Sessions, and applies limits", async () => {
   const fixture = await historyFixture();
   try {
-    const [all, one] = await Promise.all([
-      history(fixture.path, { countSince: 0, limit: 0 }),
-      history(fixture.path, { countSince: 0, limit: 1 }),
+    const [unlimited, one] = await Promise.all([
+      history(fixture.path, { since: 0 }),
+      history(fixture.path, { since: 0, limit: 1 }),
     ]);
-    assert.deepEqual(all.map((row) => row.id), ["ses_c", "ses_b", "ses_a"]);
-    assert.deepEqual([all[2]!.messagesTotal, all[2]!.messagesRecent], [0, 0]);
-    assert.deepEqual(one.map((row) => row.id), ["ses_c"]);
+    assert.deepEqual(unlimited.map(idOf), ["ses_c", "ses_b", "ses_a"]);
+    assert.deepEqual(unlimited[2]!.activity, { since: 0, messagesTotal: 0, messagesSince: 0 });
+    assert.deepEqual(one.map(idOf), ["ses_c"]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("history reports equal the exact lookup report and share one read scope", async () => {
+  const fixture = await historyFixture();
+  try {
+    const rows = await history(fixture.path, { since: 0 });
+    const exact = await withQuery(fixture.path, (query) => getSession(query, sessionID("ses_b")));
+    const item = rows.find((row) => idOf(row) === "ses_b");
+
+    assert.deepEqual(
+      { target: item!.session.target, value: item!.session.value },
+      { target: exact.target, value: exact.value },
+    );
+    assert.equal(new Set(rows.map((row) => row.session.read.readScopeID)).size, 1);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects invalid limits and cutoffs before opening a read", () => {
+  const query = {} as Parameters<typeof readSessionHistory>[0];
+  for (const limit of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => readSessionHistory(query, { since: 0, limit }), /positive safe integer/);
+  }
+  for (const since of [Number.NaN, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => readSessionHistory(query, { since }), /safe integer/);
+  }
+});
+
+test("compiles one grouped Message aggregate joined once, with no correlated counts", async () => {
+  const fixture = await historyFixture();
+  try {
+    const request = {
+      predicate: sessionUpdatedRange({ from: 15 }),
+      since: 5,
+      limit: 2,
+    } as const;
+    const { compiled, plan } = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+        Effect.flatMap(({ query }) => Effect.all({
+          compiled: query.compile(({ db }) => sessionHistoryQuery(db, request)),
+          plan: Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.explain(({ db }) =>
+            sessionHistoryQuery(db, request))))),
+        })),
+      ),
+    ));
+
+    assert.equal((compiled.sql.match(/count\(\*\)/g) ?? []).length, 1);
+    assert.equal((compiled.sql.match(/group by/g) ?? []).length, 1);
+    assert.match(compiled.sql, /group by "cotail_message"\."sessionID"/);
+    assert.match(compiled.sql, /left join \(\s*select/);
+    assert.match(compiled.sql, /case when "cotail_message"\."createdAt" >= \?/);
+    assert.doesNotMatch(compiled.sql, /\(select count/);
+    assert.doesNotMatch(compiled.sql, /coalesce\(\(select/);
+    assert.deepEqual(compiled.parameters, [5, 15, 2]);
+
+    const details = plan.map((row) => row.detail);
+    assert.equal(details.filter((detail) => detail.includes("USE TEMP B-TREE FOR GROUP BY")).length, 1);
+    assert.equal(details.some((detail) => detail.includes("SCALAR SUBQUERY")), false);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -102,7 +180,7 @@ test("acquisition and history skip payload validation while content evaluates it
         sourceID: "fixture",
         onPayloadValidation: () => { validations++; },
       }).pipe(
-        Effect.flatMap(({ query }) => readSessionHistory(query, { countSince: 0, limit: 0 })
+        Effect.flatMap(({ query }) => readSessionHistory(query, { since: 0 })
           .pipe(Effect.tap(() => Effect.sync(() => assert.equal(validations, 0))))),
       ),
     ));

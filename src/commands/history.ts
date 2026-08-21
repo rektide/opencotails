@@ -171,14 +171,22 @@ export async function run(argv: string[]): Promise<void> {
     const entries = await Effect.runPromise(Effect.scoped(
       acquireNodeOpenCodeSource({ path: dbPath, sourceID: "cli" }).pipe(Effect.flatMap(({ query }) => readSessionHistory(query, {
         predicate,
-        countSince: cutoff,
-        limit: args.limit,
+        since: cutoff,
+        limit: args.limit === 0 ? undefined : args.limit,
       }))),
     ));
-    const rows: SessionCounts[] = entries.map((entry) => ({
-      id: entry.id, title: entry.title ?? "", directory: entry.directory, slug: entry.slug,
-      time_created: entry.timeCreated, time_updated: entry.timeUpdated,
-      messages_total: entry.messagesTotal, messages_recent: entry.messagesRecent,
+    // Temporary presentation mapping pending cotail-session-report-output: the
+    // canonical result is the Session observation plus activity facet; the JSON,
+    // TSV, and Arrow emitters keep their existing field shapes for now.
+    const rows: SessionCounts[] = entries.map(({ session, activity }) => ({
+      id: session.target.address.sessionID,
+      title: session.value.title ?? "",
+      directory: session.value.location.directory,
+      slug: session.value.slug,
+      time_created: session.value.lifecycle.createdAt,
+      time_updated: session.value.lifecycle.updatedAt,
+      messages_total: activity.messagesTotal,
+      messages_recent: activity.messagesSince,
     }));
     if (args.arrow) await emitHistoryArrow(rows);
     else if (args.json) renderJson(rows);
