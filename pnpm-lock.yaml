@@ -30,6 +30,9 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
 
   packages/query-kysely:
     dependencies:
