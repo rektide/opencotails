@@ -208,6 +208,9 @@ Ship the first watch slice as a projection watcher with explicit fidelity:
 - [`query/README.md`](/.design/query/README.md) makes session metadata in the
   live database authoritative and sessions the stable result unit. The sampler
   preserves both invariants.
+- [Qualification staging and bounded enrichment](/.design/pushdown/draft1.gpt56.md)
+  distinguishes the unavoidable Session metadata scan from Message enrichment,
+  and requires viewport/watch activity probes to stay bounded by selected roots.
 - [`codance cadence policy`](file:///home/rektide/src/codance/.design/cadence-policy/init0.ds4f.md)
   catalogs richer live execution, step, tool, pending-input, and attention
   signals. Those are candidates for a later high-fidelity observation source,

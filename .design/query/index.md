@@ -2,10 +2,13 @@
 
 ## Start Here
 
-- [Qualification pushdown brief](/.design/pushdown/draft0.gpt56.md) - Critical
-  active handoff: current canonical history groups all Messages before discarding
-  unqualified Sessions. Frames the general qualify/order/window/hydrate problem,
-  required operation audit, design alternatives, and plan/work-count evidence.
+- [Qualification staging and bounded enrichment](/.design/pushdown/draft1.gpt56.md)
+  - Active pushdown design: separates semantic stage order from physical
+  boundedness, records that current history still scans the Message index, adopts
+  operation-private Kysely stages plus conformance, and provides the repair plan.
+- [Initial qualification pushdown brief](/.design/pushdown/draft0.gpt56.md) -
+  Superseded handoff that identified the broad-aggregate class of failure and
+  framed the qualify/order/window/hydrate problem.
 - [`design3.gpt56.md`](/query/design3.gpt56.md) - Implemented V2 relational query
   direction: public logical Kysely relations, hierarchical identity, witnesses,
   evidence, grouped products, and Effect-owned execution.
