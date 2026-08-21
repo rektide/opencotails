@@ -127,9 +127,8 @@ test("captures the canonical Session observation as a frozen durable value", asy
     assert.equal("read" in capture, false);
     assert.equal("readScopeID" in capture, false);
     assert.equal(Object.isFrozen(capture), true);
-    assert.equal(Object.isFrozen(capture.report), true);
-    assert.equal(Object.isFrozen(capture.report.usage.tokens.cache), true);
     assert.equal(Object.isFrozen(capture.guard), true);
+    assert.equal(Object.isFrozen(capture.report), false);
 
     await assert.rejects(
       withQuery(fixture.path, (query) => captureSessionReport(query, sessionID("ses_absent"))),
@@ -159,6 +158,8 @@ test("round-trips the wire value through JSON with exact nulls and precision", a
     assert.equal(restored.report.usage.cost === capture.report.usage.cost, true);
     assert.equal(restored.report.usage.tokens.input, Number.MAX_SAFE_INTEGER);
     assert.equal(Object.isFrozen(restored), true);
+    assert.equal(Object.isFrozen(restored.guard), true);
+    assert.equal(Object.isFrozen(restored.report), false);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -193,7 +194,81 @@ test("records observation time as capturedAt and derives the guard from lifecycl
   assert.equal(capture.capturedAt, 1712345678999);
   assert.deepEqual(capture.guard, { updatedAt: 777 });
   assert.deepEqual(capture.report, report);
-  assert.equal(Object.isFrozen(capture) && Object.isFrozen(capture.report), true);
+  assert.equal(Object.isFrozen(capture) && Object.isFrozen(capture.guard), true);
+});
+
+test("does not freeze or otherwise mutate the borrowed observation", () => {
+  const report: SessionReport = {
+    title: null,
+    slug: "borrowed",
+    location: { projectID: "prj", workspaceID: null, directory: "/work", path: null },
+    lineage: { parentSessionID: null, forkSessionID: null, forkBoundary: null },
+    run: { version: "2.5", agent: null, model: null },
+    usage: { cost: 1, tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } } },
+    summary: { additions: null, deletions: null, files: null },
+    shareURL: null,
+    lifecycle: {
+      createdAt: 5,
+      updatedAt: 777,
+      compactingAt: null,
+      archivedAt: null,
+      suspendedAt: null,
+    },
+  };
+  const observedTarget = target(sourceKey("fixture"), sessionAddress(sessionID("ses_borrowed")));
+  const observed = observation({
+    target: observedTarget,
+    value: report,
+    read: readProvenance(ReadScopeID.make("scope-borrowed"), 42),
+  });
+  const mutableLifecycle = report.lifecycle as { updatedAt: number };
+
+  const frozenStateBefore = [
+    Object.isFrozen(observed),
+    Object.isFrozen(observedTarget),
+    Object.isFrozen(observedTarget.address),
+    Object.isFrozen(observed.value),
+    Object.isFrozen(report),
+    Object.isFrozen(report.lifecycle),
+    Object.isFrozen(report.usage),
+    Object.isFrozen(report.usage.tokens),
+    Object.isFrozen(report.usage.tokens.cache),
+  ];
+
+  const capture = sessionReportCapture(observed);
+
+  assert.deepEqual([
+    Object.isFrozen(observed),
+    Object.isFrozen(observedTarget),
+    Object.isFrozen(observedTarget.address),
+    Object.isFrozen(observed.value),
+    Object.isFrozen(report),
+    Object.isFrozen(report.lifecycle),
+    Object.isFrozen(report.usage),
+    Object.isFrozen(report.usage.tokens),
+    Object.isFrozen(report.usage.tokens.cache),
+  ], frozenStateBefore);
+  assert.deepEqual(frozenStateBefore.slice(3), [
+    false, false, false, false, false, false,
+  ], "decoder-fresh report facets must start unfrozen so the test is meaningful");
+
+  assert.equal(capture.target, observedTarget);
+  assert.equal(capture.report, report);
+
+  mutableLifecycle.updatedAt = 888;
+  assert.equal(report.lifecycle.updatedAt, 888, "borrowed report stays writable after capture");
+  assert.equal(capture.guard.updatedAt, 777, "guard is an independent copy, not a reference");
+
+  // Construction must also tolerate an already-frozen observation.
+  const frozenReport = Object.freeze(structuredClone(report));
+  const frozenObserved = observation({
+    target: observedTarget,
+    value: frozenReport,
+    read: readProvenance(ReadScopeID.make("scope-frozen"), 43),
+  });
+  const frozenCapture = sessionReportCapture(frozenObserved);
+  assert.equal(frozenCapture.guard.updatedAt, frozenReport.lifecycle.updatedAt);
+  assert.equal(Object.isFrozen(frozenReport), true);
 });
 
 test("tracks changed guard inputs when the Session is recaptured", async () => {
@@ -244,6 +319,14 @@ test("rejects malformed and unknown capture schemas honestly", async () => {
       ["string guard", { ...wire, guard: { updatedAt: "200" } }],
       ["string cost", { ...wire, report: { ...report, usage: { ...usage, cost: "1.25" } } }],
       ["negative cost", { ...wire, report: { ...report, usage: { ...usage, cost: -0.5 } } }],
+      ["NaN cost", { ...wire, report: { ...report, usage: { ...usage, cost: Number.NaN } } }],
+      ["infinite cost", { ...wire, report: { ...report, usage: { ...usage, cost: Number.POSITIVE_INFINITY } } }],
+      ["negative infinite cost", { ...wire, report: { ...report, usage: { ...usage, cost: Number.NEGATIVE_INFINITY } } }],
+      ["NaN guard", { ...wire, guard: { updatedAt: Number.NaN } }],
+      ["undefined input", undefined],
+      ["nested excess in token cache", { ...wire, report: { ...report, usage: { ...usage, tokens: { ...tokens, cache: { read: 1320000, write: 9, readScopeID: "scope-capture" } } } } }],
+      ["nested excess in source key", { ...wire, target: { source: { ...wire.target.source, revision: 1 }, address: wire.target.address } }],
+      ["blank slug", { ...wire, report: { ...report, slug: " " } }],
       ["fractional tokens", { ...wire, report: { ...report, usage: { ...usage, tokens: { ...tokens, input: 1.5 } } } }],
       ["negative summary", { ...wire, report: { ...report, summary: { additions: -1, deletions: null, files: null } } }],
       ["null slug", { ...wire, report: { ...report, slug: null } }],
@@ -307,6 +390,50 @@ test("rejects smuggled provenance and expansion keys in the wire value", async (
       assert.throws(() => decodeSessionReportCapture(input), (error: unknown) =>
         error instanceof SessionReportCaptureDecodeError, `${name} must be rejected`);
     }
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("accepts blank nullable text where the canonical decoder allows it", async () => {
+  const fixture = await captureFixture(200);
+  try {
+    const capture = await withQuery(fixture.path, (query) => captureSessionReport(query, sessionID("ses_capture")));
+    const wire = JSON.parse(JSON.stringify(capture)) as Record<string, any>;
+    const report = wire.report as Record<string, any>;
+
+    const blanks: Record<string, any> = structuredClone(report);
+    blanks.title = "";
+    blanks.shareURL = "";
+    blanks.location.path = "";
+    blanks.run.agent = "";
+    blanks.run.model = "";
+    blanks.lineage.forkBoundary = "";
+    const decoded = decodeSessionReportCapture({ ...wire, report: blanks });
+    assert.equal(decoded.report.title, "");
+    assert.equal(decoded.report.location.path, "");
+    assert.equal(decoded.report.run.agent, "");
+    assert.equal(decoded.report.run.model, "");
+    assert.equal(decoded.report.shareURL, "");
+    assert.equal(decoded.report.lineage.forkBoundary, "");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("keeps the guard independent of report lifecycle on the wire", async () => {
+  const fixture = await captureFixture(200);
+  try {
+    const capture = await withQuery(fixture.path, (query) => captureSessionReport(query, sessionID("ses_capture")));
+    const wire = JSON.parse(JSON.stringify(capture)) as Record<string, any>;
+
+    // The guard is the comparison token, not a duplicate of lifecycle: v1
+    // decodes captures whose guard has drifted (for example an older capture
+    // re-serialized alongside a newer report) and leaves comparison semantics
+    // to bookmark resolution.
+    const decoded = decodeSessionReportCapture({ ...wire, guard: { updatedAt: 999 } });
+    assert.equal(decoded.guard.updatedAt, 999);
+    assert.equal(decoded.report.lifecycle.updatedAt, 200);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

@@ -15,11 +15,16 @@ export const sessionReportCaptureSchema = "cotail.session-report.capture/v1" as 
 /**
  * Storage-neutral, versioned capture of one canonical Session report.
  *
- * The value itself is the durable wire form: it is directly JSON-serializable,
- * JSON round trips preserve exact counter integers and cost precision, and it
- * deliberately carries no read provenance. `ReadScopeID` correlates live
+ * The value itself is the durable wire form: it is directly JSON-serializable
+ * and JSON round trips preserve exact counter integers and cost precision. It
+ * deliberately carries no read provenance: `ReadScopeID` correlates live
  * observations from one pinned read but is not a source revision and can never
  * detect later change; `guard.updatedAt` is the honest comparison token.
+ *
+ * Immutability is the package's TypeScript `readonly` contract, matching the
+ * query-execution design decision not to recursively freeze returned data.
+ * Constructors shallow-freeze only the shells they allocate and never freeze
+ * or copy a borrowed `Target` or `SessionReport`.
  */
 export interface SessionReportCapture {
   readonly schema: typeof sessionReportCaptureSchema;
@@ -49,6 +54,14 @@ export class SessionReportCaptureDecodeError extends Error {
   }
 }
 
+// Wire checks below use `SchemaAST.Filter` directly because effect
+// 4.0.0-beta.101 publishes no trim-blank-text, safe-integer, or finite-number
+// filter (its `isNonEmpty` is minLength:1 and admits whitespace-only strings,
+// which the canonical row decoder rejects for identifiers), and the public
+// `Schema.refine` widens `DecodingServices` to `unknown`, breaking
+// `Schema.decodeUnknownSync`'s `ConstraintDecoder<unknown, never>` constraint.
+// `Schema.check` preserves the concrete schema type, so these compose with
+// the sync decoder.
 const isNonBlankText = new SchemaAST.Filter(
   (value: string) => value.trim().length > 0
     ? undefined
@@ -146,36 +159,34 @@ const decodeWire = Schema.decodeUnknownSync(sessionReportCaptureWire, {
   propertyOrder: "original",
 });
 
-function deepFreeze(value: unknown): void {
-  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) deepFreeze(child);
-    Object.freeze(value);
-  }
-}
-
 /**
  * Converts one live canonical Session observation into its durable capture.
  *
  * The capture time is the observation time of the read that produced the
- * report, and the initial comparison guard is `lifecycle.updatedAt`.
+ * report, and the initial comparison guard is `lifecycle.updatedAt`. The
+ * borrowed `target` and `report` are aliased by reference and never frozen,
+ * copied, or otherwise mutated; only the newly allocated capture and guard
+ * shells are shallow-frozen, matching the `observation()` constructor's
+ * convention. The guard itself is a fresh value, so later writes to the
+ * borrowed report cannot alter what the capture compares against.
  */
 export function sessionReportCapture(observed: SessionReportObservation): SessionReportCapture {
-  const capture: SessionReportCapture = {
+  return Object.freeze({
     schema: sessionReportCaptureSchema,
     capturedAt: observed.read.observedAt,
     target: observed.target,
     report: observed.value,
-    guard: { updatedAt: observed.value.lifecycle.updatedAt },
-  };
-  deepFreeze(capture);
-  return capture;
+    guard: Object.freeze({ updatedAt: observed.value.lifecycle.updatedAt }),
+  } satisfies SessionReportCapture);
 }
 
 /**
- * Validates an unknown persisted wire value into a trusted, frozen capture.
+ * Validates an unknown persisted wire value into a trusted capture.
  *
  * Unknown schema versions, malformed fields, and excess keys such as smuggled
- * read provenance are rejected with `SessionReportCaptureDecodeError`.
+ * read provenance are rejected with `SessionReportCaptureDecodeError`. The
+ * decoded report is kept as decoder output without freezing; only the newly
+ * allocated capture shell and guard copy are shallow-frozen.
  */
 export function decodeSessionReportCapture(input: unknown): SessionReportCapture {
   let wire: SessionReportCaptureWire;
@@ -184,7 +195,7 @@ export function decodeSessionReportCapture(input: unknown): SessionReportCapture
   } catch (cause) {
     throw new SessionReportCaptureDecodeError(input, cause);
   }
-  const capture: SessionReportCapture = {
+  return Object.freeze({
     schema: sessionReportCaptureSchema,
     capturedAt: wire.capturedAt,
     target: target(
@@ -192,8 +203,6 @@ export function decodeSessionReportCapture(input: unknown): SessionReportCapture
       sessionAddress(sessionID(wire.target.address.sessionID)),
     ),
     report: wire.report,
-    guard: wire.guard,
-  };
-  deepFreeze(capture);
-  return capture;
+    guard: Object.freeze({ updatedAt: wire.guard.updatedAt }),
+  } satisfies SessionReportCapture);
 }
