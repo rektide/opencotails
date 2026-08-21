@@ -53,6 +53,23 @@ test("history preserves count policy and all formats", () => {
     "ID              TITLE       DIRECTORY    RECENT  TOTAL  UPDATED\nses_newest_abc  Alpha Beta  /work/alpha  1       1      1970-01-01 00:00\n1 session active since 1970-01-01 00:00 (cutoff)\n");
 });
 
+test("history rejects fractional and malformed limits without truncating them", () => {
+  for (const bad of ["1.5", "abc", "-1", "1e2.5"]) {
+    const result = cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", bad, "--db", database]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /^--limit requires a non-negative integer\n/);
+  }
+  const empty = cli(["history", "--limit", "", "--db", database]);
+  assert.equal(empty.status, 2);
+  assert.match(empty.stderr, /^--limit requires a value\n/);
+});
+
+test("history limit zero keeps its temporary unlimited presentation meaning", () => {
+  const result = cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", "0", "--json", "--db", database]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout.split("\n").filter((line) => line.length > 0).length, 3);
+});
+
 test("lookup preserves id, JSONL, and not-found behavior", () => {
   assert.equal(cli(["get-session", "-s", "ses_newest_abcdefghijkl", "--id-only", "--db", database]).stdout, "ses_newest_abcdefghijkl\n");
   assert.equal(cli(["get-session", "-C", "/work/alpha", "--json", "--db", database]).stdout,

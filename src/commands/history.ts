@@ -47,8 +47,14 @@ function parseArgs(argv: string[]): Args {
     }
     if (a === "--limit") {
       const v = argv[++i];
-      limit = v === undefined ? NaN : parseInt(v, 10);
-      if (!Number.isFinite(limit) || limit < 0) throw new Error("--limit requires a non-negative number");
+      if (v === undefined || v.trim() === "") throw new Error("--limit requires a value");
+      // Number() keeps fractional input (1.5) and junk from truncating the way
+      // parseInt silently did; only whole safe integers remain valid.
+      const parsed = Number(v);
+      if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        throw new Error("--limit requires a non-negative integer");
+      }
+      limit = parsed;
       continue;
     }
     if (a === "--directory") {
