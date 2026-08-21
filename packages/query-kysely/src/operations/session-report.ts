@@ -13,14 +13,19 @@ import type { SessionReportObservation } from "../domain/session-report.ts";
 import type { CotailRelations, SessionRelation } from "../relations/schema.ts";
 
 const sessionReportColumns = [
-  "sessionID", "projectID", "workspaceID", "parentID", "forkSessionID", "forkBoundary",
-  "slug", "directory", "path", "title", "version", "shareURL",
-  "summaryAdditions", "summaryDeletions", "summaryFiles",
-  "cost", "tokensInput", "tokensOutput", "tokensReasoning", "tokensCacheRead", "tokensCacheWrite",
-  "agent", "model", "createdAt", "updatedAt", "compactingAt", "archivedAt", "suspendedAt",
-] as const satisfies readonly (keyof SessionRelation)[];
+  "cotail_session.sessionID", "cotail_session.projectID", "cotail_session.workspaceID",
+  "cotail_session.parentID", "cotail_session.forkSessionID", "cotail_session.forkBoundary",
+  "cotail_session.slug", "cotail_session.directory", "cotail_session.path", "cotail_session.title",
+  "cotail_session.version", "cotail_session.shareURL", "cotail_session.summaryAdditions",
+  "cotail_session.summaryDeletions", "cotail_session.summaryFiles", "cotail_session.cost",
+  "cotail_session.tokensInput", "cotail_session.tokensOutput", "cotail_session.tokensReasoning",
+  "cotail_session.tokensCacheRead", "cotail_session.tokensCacheWrite", "cotail_session.agent",
+  "cotail_session.model", "cotail_session.createdAt", "cotail_session.updatedAt",
+  "cotail_session.compactingAt", "cotail_session.archivedAt", "cotail_session.suspendedAt",
+] as const satisfies readonly `cotail_session.${Extract<keyof SessionRelation, string>}`[];
 
-export type SessionReportRow = Pick<SessionRelation, typeof sessionReportColumns[number]>;
+type Unqualified<T> = T extends `cotail_session.${infer Field}` ? Field : never;
+export type SessionReportRow = Pick<SessionRelation, Unqualified<typeof sessionReportColumns[number]>>;
 
 export class SessionReportDecodeError extends Error {
   public readonly sessionID: string | null;

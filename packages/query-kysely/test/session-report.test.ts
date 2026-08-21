@@ -162,6 +162,26 @@ test("preserves null optional fields and zero-valued counters", async () => {
   }
 });
 
+test("keeps the canonical projection unambiguous when operations add joins", async () => {
+  const fixture = await reportFixture();
+  try {
+    const rows = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+        Effect.flatMap(({ query }) => query.openRead),
+        Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
+          .leftJoin("cotail_message", "cotail_message.sessionID", "cotail_session.sessionID")
+          .where("cotail_session.sessionID", "=", "ses_report"))),
+      ),
+    ));
+
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.sessionID, "ses_report");
+    assert.equal(rows[0]!.projectID, "prj_report");
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
 test("rejects malformed Session report rows at the decoder seam", async () => {
   const fixture = await reportFixture();
   try {
