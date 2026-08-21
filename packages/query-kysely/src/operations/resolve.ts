@@ -80,9 +80,8 @@ export function findLatestSession(
 }
 
 function validateListRequest(request: ListSessionsRequest): void {
-  if (!Number.isSafeInteger(request.page.first) || request.page.first <= 0
-    || request.page.first >= Number.MAX_SAFE_INTEGER) {
-    throw new RangeError("Session page size must be a positive safe integer below Number.MAX_SAFE_INTEGER");
+  if (!Number.isSafeInteger(request.page.first) || request.page.first <= 0) {
+    throw new RangeError("Session page size must be a positive safe integer");
   }
   const cursor = request.page.after;
   if (cursor !== undefined && (!Number.isSafeInteger(cursor.updatedAt) || cursor.updatedAt < 0
@@ -112,7 +111,7 @@ export function listSessions(
     return sessions
       .orderBy("cotail_session.updatedAt", direction)
       .orderBy("cotail_session.sessionID", direction)
-      .limit(request.page.first + 1);
+      .limit(request.page.first === Number.MAX_SAFE_INTEGER ? request.page.first : request.page.first + 1);
   }).pipe(
     Effect.flatMap((rows) => decodeRows(rows, read.provenance, read.source)),
     Effect.map((decoded) => {

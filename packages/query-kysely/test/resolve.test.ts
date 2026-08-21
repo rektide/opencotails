@@ -123,7 +123,7 @@ test("lists deterministic keyset pages in either explicit order", async () => {
 test("rejects invalid page sizes and cursors before opening a read", async () => {
   const fixture = await resolveFixture();
   try {
-    for (const first of [0, -1, 1.5, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
+    for (const first of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
         order: "updated-desc", page: { first },
       }), /positive safe integer/);
@@ -134,6 +134,12 @@ test("rejects invalid page sizes and cursors before opening a read", async () =>
     assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
       order: "updated-desc", page: { first: 1, after: { updatedAt: 1, sessionID: " " } },
     }), /cursor/);
+
+    const maximum = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-desc", page: { first: Number.MAX_SAFE_INTEGER },
+    }));
+    assert.equal(maximum.sessions.length, 3);
+    assert.equal(maximum.next, undefined);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
