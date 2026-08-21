@@ -5,6 +5,10 @@
 - [`design3.gpt56.md`](/query/design3.gpt56.md) - Implemented V2 relational query
   direction: public logical Kysely relations, hierarchical identity, witnesses,
   evidence, grouped products, and Effect-owned execution.
+- [Canonical session reporting and operation pass](/.design/session-report/full-query-pass0.gpt56.md)
+  - Active breaking refinement of the operation-product layer: one Session
+  report observation, explicit cardinality and pagination, shared machine-output
+  specifications, compact usage presentation, and bounded child analysis.
 - [Standalone query execution](/.design/query2/design2.gpt56.md) - Active
   `node:sqlite` direction: scoped reads, truthful provenance, stable snapshots,
   conventional Effect streaming, explain diagnostics, and direct migration.

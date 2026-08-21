@@ -708,6 +708,10 @@ contract.
   intentionally softened here.
 - [The V2 relational query world](/.design/query/design3.gpt56.md) defines the
   logical relations, witnesses, and evidence consumed by this module.
+- [The canonical session reporting pass](/.design/session-report/full-query-pass0.gpt56.md)
+  builds stable Session operations on this execution seam. Its later intentional
+  machine-output break supersedes this document's migration-time requirement to
+  preserve then-existing CLI output.
 - [Current LogicalQuery](/packages/query-kysely/src/query/logical-query.ts) is
   the stateless execution seam Cut 1 replaces.
 - [Current node:sqlite runtime](/packages/query-kysely/src/runtime/node-sqlite.ts)

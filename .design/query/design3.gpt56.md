@@ -1279,3 +1279,14 @@ from optional source revision, makes transaction and stream ownership explicit,
 defines capability-honest interruption and hosted behavior, and proposes the
 standalone contract/conformance delivery cuts. It does not replace this
 document's logical relation, identity, witness, evidence, or bookmark model.
+
+## Session Reporting Refinement
+
+[The canonical session reporting and operation pass](/.design/session-report/full-query-pass0.gpt56.md)
+applies this document's stable-product principle after the query-world rewrite.
+It replaces the overlapping `SessionSummary`, `SessionDetails`, and
+`HistoryEntry` compatibility products with one source-qualified Session
+observation shared by lookup, history, and search. Operation-specific evidence
+and aggregates remain wrappers rather than optional fields on that report. It
+also deliberately advances Session products from `Located` to `Observation` so
+their read provenance is as truthful as document evidence.
