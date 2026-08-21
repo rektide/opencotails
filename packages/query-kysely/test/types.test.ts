@@ -7,6 +7,7 @@ import type {
   LogicalQueryShape,
   QueryError,
 } from "../src/query/logical-query.ts";
+import { all } from "../src/query/logical-query.ts";
 import type { QueryCompileError } from "../src/query/errors.ts";
 
 test("logical query callbacks preserve output and hide physical schema", () => {
@@ -14,7 +15,7 @@ test("logical query callbacks preserve output and hide physical schema", () => {
     const rows: Effect.Effect<
       Readonly<Array<{ sessionID: string; messageSeq: number }>>,
       QueryError
-    > = query.run(({ db: logical }) => logical.selectFrom("cotail_message")
+    > = all(query, ({ db: logical }) => logical.selectFrom("cotail_message")
       .select(["sessionID", "messageSeq"]));
 
     const compiled: Effect.Effect<

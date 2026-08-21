@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { SessionPredicate } from "../direct/session.ts";
 import type { SessionDetails } from "../domain/results.ts";
-import type { LogicalQueryShape, QueryError } from "../query/logical-query.ts";
+import { all, type LogicalQueryShape, type QueryError } from "../query/logical-query.ts";
 import { applySessionPredicate } from "./session-context.ts";
 
 export interface ResolveSessionRequest {
@@ -13,7 +13,7 @@ export function resolveSession(
   query: LogicalQueryShape,
   request: ResolveSessionRequest,
 ): Effect.Effect<SessionDetails | undefined, QueryError> {
-  return query.run(({ db }) => applySessionPredicate(db.selectFrom("cotail_session"), request.predicate)
+  return all(query, ({ db }) => applySessionPredicate(db.selectFrom("cotail_session"), request.predicate)
     .select([
       "cotail_session.sessionID as id",
       "cotail_session.title",

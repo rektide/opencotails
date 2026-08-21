@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
+import { all } from "../src/query/logical-query.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
@@ -44,19 +45,18 @@ test("queries Sessions and Messages without filling sequence gaps or reading com
     const result = await Effect.runPromise(Effect.scoped(
       acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
         Effect.flatMap(({ query }) => Effect.all({
-          sessions: query.run(({ db }) => db.selectFrom("cotail_session")
+          sessions: all(query, ({ db }) => db.selectFrom("cotail_session")
             .select(["sessionID", "title", "updatedAt"])
             .orderBy("sessionID")),
-          messages: query.run(({ db }) => db.selectFrom("cotail_message")
+          messages: all(query, ({ db }) => db.selectFrom("cotail_message")
             .select(["sessionID", "messageID", "messageSeq"])
             .orderBy("sessionID")
             .orderBy("messageSeq")),
           compiled: query.compile(({ db }) => db.selectFrom("cotail_message")
             .select("messageID")
             .where("messageSeq", ">", 2)),
-          plan: query.explainQueryPlan(({ db }) => db.selectFrom("cotail_session")
-            .select("sessionID")
-            .where("projectID", "=", "prj_a")),
+          plan: Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.explain(({ db }) =>
+            db.selectFrom("cotail_session").select("sessionID").where("projectID", "=", "prj_a"))))),
         })),
       ),
     ));

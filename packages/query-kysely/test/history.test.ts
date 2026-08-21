@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
+import { all } from "../src/query/logical-query.ts";
 import { sessionUpdatedRange } from "../src/direct/session.ts";
 import { readSessionHistory } from "../src/operations/history.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
@@ -113,7 +114,7 @@ test("acquisition and history skip payload validation while content evaluates it
         sourceID: "fixture",
         onPayloadValidation: () => { validations++; },
       }).pipe(
-        Effect.flatMap(({ query }) => query.run(({ db }) => db.selectFrom("cotail_document").select("documentKey"))),
+        Effect.flatMap(({ query }) => all(query, ({ db }) => db.selectFrom("cotail_document").select("documentKey"))),
       ),
     )), /expected string/);
     assert.ok(validations > 0);

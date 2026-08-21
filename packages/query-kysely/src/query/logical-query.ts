@@ -1,7 +1,8 @@
 import type { InferResult, SelectQueryBuilder } from "kysely";
 import type { ReadonlyQueryCreator } from "kysely/readonly";
-import { Context, Effect } from "effect";
+import { Context, Effect, Stream } from "effect";
 import type { SourceKey } from "../domain/address.ts";
+import type { ReadProvenance } from "../domain/observation.ts";
 import type { CotailRelations } from "../relations/schema.ts";
 import type { SourceCapabilities } from "../source/capabilities.ts";
 import { QueryCompileError, QueryExecutionError } from "./errors.ts";
@@ -29,64 +30,42 @@ export interface SqliteQueryPlanRow {
 
 export type QueryError = QueryCompileError | QueryExecutionError;
 
-export interface LogicalQueryShape {
-  readonly run: <const Q extends AnyLogicalSelect>(
+export interface LogicalRead {
+  readonly source: SourceKey;
+  readonly capabilities: SourceCapabilities;
+  readonly provenance: ReadProvenance;
+  readonly all: <const Q extends AnyLogicalSelect>(
     build: (context: QueryContext) => Q,
   ) => Effect.Effect<Readonly<InferResult<Q>>, QueryError>;
+  readonly stream: <const Q extends AnyLogicalSelect>(
+    build: (context: QueryContext) => Q,
+  ) => Stream.Stream<InferResult<Q>[number], QueryError>;
+  readonly explain: <const Q extends AnyLogicalSelect>(
+    build: (context: QueryContext) => Q,
+  ) => Effect.Effect<readonly SqliteQueryPlanRow[], QueryError>;
+}
+
+export interface LogicalQueryShape {
+  readonly openRead: Effect.Effect<LogicalRead, QueryExecutionError, import("effect").Scope.Scope>;
   readonly compile: <const Q extends AnyLogicalSelect>(
     build: (context: QueryContext) => Q,
   ) => Effect.Effect<CompiledLogicalQuery<InferResult<Q>[number]>, QueryCompileError>;
-  readonly explainQueryPlan: <const Q extends AnyLogicalSelect>(
-    build: (context: QueryContext) => Q,
-  ) => Effect.Effect<readonly SqliteQueryPlanRow[], QueryError>;
 }
 
 export class LogicalQuery extends Context.Service<LogicalQuery, LogicalQueryShape>()(
   "@opencoattails/query-kysely/LogicalQuery",
 ) {}
 
-export interface LogicalQueryExecutor {
-  readonly execute: (sql: string, parameters: readonly unknown[]) => readonly unknown[];
-}
+export const all = <const Q extends AnyLogicalSelect>(
+  query: LogicalQueryShape,
+  build: (context: QueryContext) => Q,
+): Effect.Effect<Readonly<InferResult<Q>>, QueryError> => Effect.scoped(
+  query.openRead.pipe(Effect.flatMap((read) => read.all(build))),
+);
 
-const message = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
-
-export function makeLogicalQuery(input: {
-  readonly context: QueryContext;
-  readonly executor: LogicalQueryExecutor;
-}): LogicalQueryShape {
-  const compile = <const Q extends AnyLogicalSelect>(
-    build: (context: QueryContext) => Q,
-  ): Effect.Effect<CompiledLogicalQuery<InferResult<Q>[number]>, QueryCompileError> =>
-    Effect.try({
-      try: () => {
-        const compiled = build(input.context).compile();
-        return Object.freeze({
-          sql: compiled.sql,
-          parameters: Object.freeze([...compiled.parameters]),
-        });
-      },
-      catch: (cause) => new QueryCompileError({ message: message(cause) }),
-    });
-
-  return LogicalQuery.of(Object.freeze({
-    compile,
-    run: <const Q extends AnyLogicalSelect>(build: (context: QueryContext) => Q) =>
-      compile(build).pipe(
-        Effect.flatMap((compiled) => Effect.try({
-          try: () => input.executor.execute(compiled.sql, compiled.parameters) as Readonly<InferResult<Q>>,
-          catch: (cause) => new QueryExecutionError({ message: message(cause) }),
-        })),
-      ),
-    explainQueryPlan: <const Q extends AnyLogicalSelect>(build: (context: QueryContext) => Q) =>
-      compile(build).pipe(
-        Effect.flatMap((compiled) => Effect.try({
-          try: () => input.executor.execute(
-            `EXPLAIN QUERY PLAN ${compiled.sql}`,
-            compiled.parameters,
-          ) as readonly SqliteQueryPlanRow[],
-          catch: (cause) => new QueryExecutionError({ message: message(cause) }),
-        })),
-      ),
-  }));
-}
+export const stream = <const Q extends AnyLogicalSelect>(
+  query: LogicalQueryShape,
+  build: (context: QueryContext) => Q,
+): Stream.Stream<InferResult<Q>[number], QueryError> => Stream.unwrap(
+  query.openRead.pipe(Effect.map((read) => read.stream(build))),
+);

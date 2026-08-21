@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Cause, Effect, Exit } from "effect";
 import type { AnyLogicalSelect } from "../src/query/logical-query.ts";
+import { all } from "../src/query/logical-query.ts";
 import { QueryExecutionError } from "../src/query/errors.ts";
 import {
   SourceOpenError,
@@ -30,10 +31,10 @@ test("opens read-only, registers regexp, rejects writes, and closes exactly once
       acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "node-test" }).pipe(
         Effect.tap((source) => Effect.sync(() => { retained = source; })),
         Effect.flatMap((source) => Effect.all({
-          regex: source.query.run(({ db }) => db.selectNoFrom((eb) => [
+          regex: all(source.query, ({ db }) => db.selectNoFrom((eb) => [
             eb.fn("regexp", [eb.val("^Al"), eb.val("Alpha"), eb.val("")]).as("matched"),
           ])),
-          write: source.query.run(() => ({
+          write: all(source.query, () => ({
             compile: () => ({ sql: "insert into kv values ('x', 'x', 0, 0)", parameters: [] }),
           }) as unknown as AnyLogicalSelect).pipe(Effect.flip),
         })),
@@ -42,7 +43,7 @@ test("opens read-only, registers regexp, rejects writes, and closes exactly once
 
     assert.deepEqual(result.regex.map((row) => ({ ...row })), [{ matched: 1 }]);
     assert(result.write instanceof QueryExecutionError);
-    assert.match(result.write.message, /read-only adapter/);
+    assert.match(result.write.message, /readonly|read-only/);
     assert.equal(retained?.closed, true);
     assert.equal(retained?.closed, true);
   } finally {

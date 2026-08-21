@@ -1,6 +1,6 @@
 import type { SessionPredicate } from "../direct/session.ts";
 import type { HistoryEntry } from "../domain/results.ts";
-import type { LogicalQueryShape, QueryError } from "../query/logical-query.ts";
+import { all, type LogicalQueryShape, type QueryError } from "../query/logical-query.ts";
 import { applySessionPredicate } from "./session-context.ts";
 import { Effect } from "effect";
 import { sql } from "kysely";
@@ -21,7 +21,7 @@ export function readSessionHistory(
     throw new RangeError("history limit must be a non-negative safe integer");
   }
 
-  return query.run(({ db }) => {
+  return all(query, ({ db }) => {
     let history = applySessionPredicate(db.selectFrom("cotail_session"), request.predicate)
       .select([
         "cotail_session.sessionID as id",

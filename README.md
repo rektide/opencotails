@@ -27,7 +27,7 @@ Cotail supports OpenCode's authoritative V2 projections: `session_v2` and `sessi
 ## Requirements
 
 - Linux for PID-based `get-session` resolution through `/proc`
-- Node.js 22.18 or newer for direct TypeScript execution
+- Node.js 24 or newer for native SQLite busy timeouts and direct TypeScript execution
 - pnpm for installing this workspace
 - An OpenCode database using the V2 session schema
 
@@ -214,10 +214,10 @@ flowchart LR
 
 - Source-qualified hierarchical `Address`, `Target`, and `Observation` types.
 - Logical Session, Message, content, tool, shell, attachment, compaction, and document relations.
-- Public Kysely `run`, `compile`, and SQLite query-plan operations.
+- Scoped buffered, streaming, compile, and SQLite query-plan operations over one pinned read snapshot.
 - Contextual Session predicates and alias-safe named document witnesses.
 - Checked evidence mapping, payload revisions, grouping, and deterministic limits.
-- Effect-scoped `node:sqlite` acquisition with exact-once cleanup.
+- Effect-scoped `node:sqlite` source, transaction, and iterator acquisition with exact-once cleanup.
 
 [`@opencoattails/query-runtime`](/packages/query-runtime/src/index.ts) provides the typed registry used to compose scoped query implementations and capabilities.
 

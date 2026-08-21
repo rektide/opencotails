@@ -10,6 +10,8 @@ import {
   messageAddress,
   messageID,
   observation,
+  ReadScopeID,
+  readProvenance,
   projectAddress,
   projectID,
   projectionRevision,
@@ -94,11 +96,11 @@ test("qualifies addresses by source and records projection provenance", () => {
   );
   const located = target(sourceKey("local-opencode"), address);
   const revision = projectionRevision(1_720_000_000_000, "sha256:abc");
+  const read = readProvenance(ReadScopeID.make("tx:42"), 1_720_000_000_001);
   const observed = observation({
     target: located,
     value: { text: "hello" },
-    observedAt: 1_720_000_000_001,
-    sourceSnapshot: "tx:42",
+    read,
     revision,
   });
 
@@ -108,8 +110,7 @@ test("qualifies addresses by source and records projection provenance", () => {
       address,
     },
     value: { text: "hello" },
-    observedAt: 1_720_000_000_001,
-    sourceSnapshot: "tx:42",
+    read,
     revision,
   });
   assert.ok(Object.isFrozen(located));
@@ -134,8 +135,8 @@ test("rejects malformed opaque values and derived coordinates", () => {
   assert.throws(() => projectionRevision(-1, "hash"), /messageUpdatedAt/);
   assert.throws(() => projectionRevision(1, ""), /payloadHash/);
   assert.throws(
-    () => observation({ target: target(sourceKey("source"), message), value: null, observedAt: 0, sourceSnapshot: "" }),
-    /sourceSnapshot/,
+    () => ReadScopeID.make(""),
+    /length of at least 1/,
   );
 });
 
@@ -151,8 +152,7 @@ if (false) {
   const exactObservation: Observation<MessageAddress, { readonly text: string }> = observation({
     target: exactTarget,
     value: { text: "hello" },
-    observedAt: 0,
-    sourceSnapshot: "snapshot",
+    read: readProvenance(ReadScopeID.make("snapshot"), 0),
   });
   void exactObservation;
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
+import { all } from "../src/query/logical-query.ts";
 import { QueryRegistry, queryRegistryLayer } from "@opencoattails/query-runtime";
 import {
   logicalKyselyCapability,
@@ -31,7 +32,7 @@ test("registers the canonical scoped logical world", async () => {
       Effect.gen(function* () {
         const registry = yield* QueryRegistry;
         const instance = yield* registry.get(logicalKyselyQueryKey);
-        const rows = yield* instance.world.run(({ db }) => db.selectFrom("cotail_session").select("sessionID"));
+        const rows = yield* all(instance.world, ({ db }) => db.selectFrom("cotail_session").select("sessionID"));
         return {
           rows,
           ids: registry.byCapability(logicalKyselyCapability).map((entry) => entry.key.id),

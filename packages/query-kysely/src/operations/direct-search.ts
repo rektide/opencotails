@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { sql } from "kysely";
 import type { DocumentWitness, WitnessName } from "../direct/witness.ts";
@@ -21,6 +21,7 @@ import type {
   SessionSummary,
 } from "../domain/results.ts";
 import { sessionID } from "../domain/identifier.ts";
+import type { ReadProvenance } from "../domain/observation.ts";
 import type { LogicalQueryShape, QueryError } from "../query/logical-query.ts";
 import type { DocumentRelation } from "../relations/schema.ts";
 
@@ -97,8 +98,7 @@ function payloadHash(sourceJSON: string, messageID: string, messageType: string)
 function decodeRows(
   rows: readonly SearchRow[],
   request: DirectSessionSearch,
-  observedAt: number,
-  sourceSnapshot: string,
+  read: ReadProvenance,
 ): readonly GroupedSession<DirectEvidence>[] {
   const groups = new Map<string, {
     session: GroupedSession<DirectEvidence>["session"];
@@ -149,8 +149,7 @@ function decodeRows(
           field: row.field,
           excerpt: row.text.slice(0, excerptLength),
         }),
-        observedAt,
-        sourceSnapshot,
+        read,
         ...(revision === undefined ? {} : { revision }),
       }),
     }));
@@ -168,10 +167,7 @@ export function searchDirectSessions(
   request: DirectSessionSearch,
 ): Effect.Effect<readonly GroupedSession<DirectEvidence>[], DirectSearchError> {
   validate(request);
-  const observedAt = Date.now();
-  const sourceSnapshot = `direct:${randomUUID()}`;
-
-  return query.run(({ db, source }) => db
+  return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all(({ db, source }) => db
     .with("qualified_sessions", (qb) => {
       let sessions = qb.selectFrom("cotail_session")
         .select([
@@ -290,10 +286,10 @@ export function searchDirectSessions(
     .orderBy("session_hits.documentKey"),
   ).pipe(
     Effect.flatMap((rows) => Effect.try({
-      try: () => decodeRows(rows as unknown as readonly SearchRow[], request, observedAt, sourceSnapshot),
+      try: () => decodeRows(rows as unknown as readonly SearchRow[], request, read.provenance),
       catch: (cause) => cause instanceof RowDecodeError
         ? cause
         : new RowDecodeError(cause instanceof Error ? cause.message : String(cause), null),
     })),
-  );
+  ))));
 }

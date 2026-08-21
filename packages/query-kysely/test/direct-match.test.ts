@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
+import { all } from "../src/query/logical-query.ts";
 import { sql } from "kysely";
 import { literal, regex } from "../src/direct/match.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
@@ -52,7 +53,7 @@ test("case-insensitive regex preserves JavaScript character classes and Unicode 
   try {
     const result = await Effect.runPromise(Effect.scoped(
       acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
-        Effect.flatMap(({ query }) => query.run(({ db }) => db.selectNoFrom((eb) => [
+        Effect.flatMap(({ query }) => all(query, ({ db }) => db.selectNoFrom((eb) => [
           sql<number>`${regex(eb.val("A"), "\\D", { flags: "i" })}`.as("nonDigit"),
           sql<number>`${regex(eb.val("A"), "\\S", { flags: "i" })}`.as("nonSpace"),
           sql<number>`${regex(eb.val("É"), "\\p{Lu}", { flags: "i" })}`.as("unicodeLetter"),

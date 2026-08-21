@@ -7,9 +7,9 @@ import {
   IncompleteContentModelError,
   MigrationIncompleteError,
   SourceSchemaError,
-  inspectOpenCodeV2Source,
   validateStoredMessagePayload,
 } from "../src/source/index.ts";
+import { inspectOpenCodeV2Source } from "../src/source/validation.ts";
 import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
 
 const inspect = (database: DatabaseSync) => Effect.runSync(inspectOpenCodeV2Source(database));

@@ -1,4 +1,16 @@
+import { Schema } from "effect";
 import type { Address, Target } from "./address.ts";
+
+export const ReadScopeID = Schema.String.pipe(
+  Schema.check(Schema.isNonEmpty()),
+  Schema.brand("ReadScopeID"),
+);
+export type ReadScopeID = typeof ReadScopeID.Type;
+
+export interface ReadProvenance {
+  readonly readScopeID: ReadScopeID;
+  readonly observedAt: number;
+}
 
 export interface ProjectionRevision {
   readonly messageUpdatedAt: number;
@@ -8,8 +20,7 @@ export interface ProjectionRevision {
 export interface Observation<A extends Address, V> {
   readonly target: Target<A>;
   readonly value: V;
-  readonly observedAt: number;
-  readonly sourceSnapshot: string;
+  readonly read: ReadProvenance;
   readonly revision?: ProjectionRevision;
 }
 
@@ -27,6 +38,11 @@ function nonEmpty(name: string, value: string): string {
   return value;
 }
 
+export const readProvenance = (readScopeID: ReadScopeID, observedAt: number): ReadProvenance => Object.freeze({
+  readScopeID,
+  observedAt: timestamp("observedAt", observedAt),
+});
+
 export const projectionRevision = (
   messageUpdatedAt: number,
   payloadHash: string,
@@ -38,15 +54,13 @@ export const projectionRevision = (
 export function observation<A extends Address, V>(input: {
   readonly target: Target<A>;
   readonly value: V;
-  readonly observedAt: number;
-  readonly sourceSnapshot: string;
+  readonly read: ReadProvenance;
   readonly revision?: ProjectionRevision;
 }): Observation<A, V> {
   const common = {
     target: input.target,
     value: input.value,
-    observedAt: timestamp("observedAt", input.observedAt),
-    sourceSnapshot: nonEmpty("sourceSnapshot", input.sourceSnapshot),
+    read: input.read,
   };
   return Object.freeze(input.revision === undefined ? common : { ...common, revision: input.revision });
 }

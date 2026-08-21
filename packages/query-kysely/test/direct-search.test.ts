@@ -74,9 +74,9 @@ test("groups independent witnesses with per-Session limits and stable evidence",
     assert.equal(evidence[0]!.document.revision?.payloadHash, createHash("sha256")
       .update('{"id":"msg_c0","text":"alpha","time":{"created":1},"type":"user"}').digest("hex"));
     assert.notEqual(evidence[0]!.document.revision?.payloadHash, JSON.stringify(evidence[0]!.document.target.address));
-    assert.ok(Number.isSafeInteger(evidence[0]!.document.observedAt));
-    assert.equal(new Set(evidence.map((child) => child.document.observedAt)).size, 1);
-    assert.equal(new Set(evidence.map((child) => child.document.sourceSnapshot)).size, 1);
+    assert.ok(Number.isSafeInteger(evidence[0]!.document.read.observedAt));
+    assert.equal(new Set(evidence.map((child) => child.document.read.observedAt)).size, 1);
+    assert.equal(new Set(evidence.map((child) => child.document.read.readScopeID)).size, 1);
     assert.equal("revision" in evidence[0]!.document.value, false);
     assert.equal(result[1]!.truncated, true);
   } finally {
@@ -95,8 +95,8 @@ test("Session-title evidence is observed without inventing a Message revision", 
     const document = result[0]!.children[0]!.document;
     assert.equal(document.value.field, "session.title");
     assert.equal(document.revision, undefined);
-    assert.ok(document.observedAt > 0);
-    assert.match(document.sourceSnapshot, /^direct:/);
+    assert.ok(document.read.observedAt > 0);
+    assert.ok(document.read.readScopeID.length > 0);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

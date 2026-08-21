@@ -1,9 +1,25 @@
+import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 import type { SqliteDatabase, SqliteStatement } from "kysely";
-import { Kysely, SqliteDialect } from "kysely";
-import { Effect, Schema } from "effect";
+import { type InferResult, Kysely, SqliteDialect } from "kysely";
+import { Effect, Schema, Semaphore, Stream } from "effect";
 import { sourceKey, type SourceKey } from "../domain/address.ts";
-import { makeLogicalQuery, type LogicalQueryShape } from "../query/logical-query.ts";
+import { ReadScopeID, readProvenance } from "../domain/observation.ts";
+import {
+  LogicalQuery,
+  type AnyLogicalSelect,
+  type CompiledLogicalQuery,
+  type LogicalQueryShape,
+  type LogicalRead,
+  type QueryContext,
+  type SqliteQueryPlanRow,
+} from "../query/logical-query.ts";
+import {
+  QueryCompileError,
+  QueryExecutionError,
+  type QueryExecutionPhase,
+  type QueryExecutionReason,
+} from "../query/errors.ts";
 import { logicalWorld } from "../relations/world.ts";
 import type { PhysicalOpenCodeV2 } from "../source/contracts.ts";
 import type { SourceCapabilities } from "../source/capabilities.ts";
@@ -18,6 +34,7 @@ export class SourceOpenError extends Schema.TaggedErrorClass<SourceOpenError>()(
 export interface NodeOpenCodeSourceConfig {
   readonly path: string;
   readonly sourceID: string;
+  readonly busyTimeoutMs?: number;
   readonly onPayloadValidation?: (messageID: string, messageType: string) => void;
 }
 
@@ -28,60 +45,15 @@ export interface NodeOpenCodeSource {
   readonly closed: boolean;
 }
 
-function isReadStatement(statement: string): boolean {
-  let depth = 0;
-  let quote: "'" | '"' | "`" | "]" | undefined;
-  const words: string[] = [];
-  for (let index = 0; index < statement.length;) {
-    const character = statement[index]!;
-    if (quote !== undefined) {
-      if (character === quote) {
-        if (statement[index + 1] === quote && quote !== "]") index += 2;
-        else { quote = undefined; index++; }
-      } else index++;
-      continue;
-    }
-    if (character === "'" || character === '"' || character === "`" || character === "[") {
-      quote = character === "[" ? "]" : character;
-      index++;
-      continue;
-    }
-    if (character === "-" && statement[index + 1] === "-") {
-      const end = statement.indexOf("\n", index + 2);
-      index = end < 0 ? statement.length : end;
-      continue;
-    }
-    if (character === "/" && statement[index + 1] === "*") {
-      const end = statement.indexOf("*/", index + 2);
-      index = end < 0 ? statement.length : end + 2;
-      continue;
-    }
-    if (character === "(") { depth++; index++; continue; }
-    if (character === ")") { depth--; index++; continue; }
-    if (depth === 0 && /[A-Za-z]/.test(character)) {
-      const word = /^[A-Za-z]+/.exec(statement.slice(index))![0]!;
-      words.push(word.toLowerCase());
-      index += word.length;
-      continue;
-    }
-    index++;
-  }
-  if (words[0] === "select" || words[0] === "explain") return true;
-  return words[0] === "with"
-    && words.slice(1).includes("select")
-    && !words.slice(1).some((word) => ["insert", "update", "delete", "replace"].includes(word));
-}
-
 export class ReadonlyNodeSqliteStatement implements SqliteStatement {
   public readonly reader: boolean;
   public readonly statement: StatementSync;
 
   public constructor(
     statement: StatementSync,
-    sql: string,
   ) {
     this.statement = statement;
-    this.reader = isReadStatement(sql);
+    this.reader = statement.columns().length > 0;
   }
 
   public all(parameters: readonly unknown[]): unknown[] {
@@ -119,7 +91,7 @@ export class ReadonlyNodeSqliteDatabase implements SqliteDatabase {
 
   public prepare(sql: string): SqliteStatement {
     if (this.closed) throw new Error("database closed");
-    return new ReadonlyNodeSqliteStatement(this.database.prepare(sql), sql);
+    return new ReadonlyNodeSqliteStatement(this.database.prepare(sql));
   }
 
   public close(): void {
@@ -140,7 +112,7 @@ function acquire(config: NodeOpenCodeSourceConfig): Effect.Effect<AcquiredNodeSo
     try: () => {
       let native: DatabaseSync | undefined;
       try {
-        native = new DatabaseSync(config.path, { readOnly: true });
+        native = new DatabaseSync(config.path, { readOnly: true, timeout: config.busyTimeoutMs ?? 5_000 });
         native.exec("PRAGMA query_only = ON");
         const adapter = new ReadonlyNodeSqliteDatabase(native, config.onPayloadValidation);
         const physical = new Kysely<PhysicalOpenCodeV2>({
@@ -159,6 +131,181 @@ function acquire(config: NodeOpenCodeSourceConfig): Effect.Effect<AcquiredNodeSo
   });
 }
 
+type ReadState = "open" | "statement-active" | "closed";
+
+export class ReadScopeClosed extends Error {
+  public readonly source: SourceKey;
+
+  public constructor(source: SourceKey) {
+    super(`read scope for ${source.sourceID} is closed`);
+    this.name = "ReadScopeClosed";
+    this.source = source;
+  }
+}
+
+const message = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
+
+function sqliteCode(cause: unknown): string | undefined {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) return undefined;
+  return typeof cause.code === "string" ? cause.code : undefined;
+}
+
+function sqliteReason(cause: unknown): QueryExecutionReason {
+  const value = cause as { readonly errcode?: unknown; readonly message?: unknown };
+  if (value.errcode === 5 || (typeof value.message === "string" && /\bbusy\b/i.test(value.message))) return "busy";
+  if (value.errcode === 6 || (typeof value.message === "string" && /\blocked\b/i.test(value.message))) return "locked";
+  return "sqlite";
+}
+
+function executionError(source: SourceKey, phase: QueryExecutionPhase, cause: unknown): QueryExecutionError {
+  const code = sqliteCode(cause);
+  return new QueryExecutionError({
+    source,
+    phase,
+    reason: sqliteReason(cause),
+    message: message(cause),
+    ...(code === undefined ? {} : { code }),
+    cause,
+  });
+}
+
+function makeNodeLogicalQuery(input: {
+  readonly native: DatabaseSync;
+  readonly context: QueryContext;
+  readonly semaphore: Semaphore.Semaphore;
+}): LogicalQueryShape {
+  const { context, native, semaphore } = input;
+  const compile = <const Q extends AnyLogicalSelect>(
+    build: (context: QueryContext) => Q,
+  ): Effect.Effect<CompiledLogicalQuery<InferResult<Q>[number]>, QueryCompileError> => Effect.try({
+    try: () => {
+      const compiled = build(context).compile();
+      return Object.freeze({
+        sql: compiled.sql,
+        parameters: Object.freeze([...compiled.parameters]),
+      });
+    },
+    catch: (cause) => new QueryCompileError({ message: message(cause), cause }),
+  });
+
+  const openRead = Effect.gen(function*() {
+    yield* Effect.uninterruptibleMask((restore) => restore(semaphore.take(1)).pipe(
+      Effect.tap(() => Effect.addFinalizer(() => semaphore.release(1).pipe(Effect.asVoid))),
+      Effect.asVoid,
+    ));
+
+    let state: ReadState = "open";
+    yield* Effect.acquireRelease(
+      Effect.try({
+        try: () => native.exec("BEGIN DEFERRED"),
+        catch: (cause) => executionError(context.source, "begin", cause),
+      }),
+      () => Effect.sync(() => {
+        try {
+          native.exec("ROLLBACK");
+        } finally {
+          state = "closed";
+        }
+      }),
+    );
+    yield* Effect.try({
+      try: () => native.prepare("SELECT rootpage FROM sqlite_schema ORDER BY name LIMIT 1").get(),
+      catch: (cause) => executionError(context.source, "pin", cause),
+    });
+
+    const provenance = readProvenance(ReadScopeID.make(randomUUID()), Date.now());
+    const acquireSlot = Effect.suspend(() => {
+      if (state === "closed") return Effect.die(new ReadScopeClosed(context.source));
+      if (state === "statement-active") {
+        return Effect.fail(new QueryExecutionError({
+          source: context.source,
+          phase: "prepare",
+          reason: "read-scope-busy",
+          message: `read scope for ${context.source.sourceID} already has an active statement`,
+        }));
+      }
+      state = "statement-active";
+      return Effect.void;
+    });
+    const releaseSlot = () => Effect.sync(() => {
+      if (state === "statement-active") state = "open";
+    });
+
+    const all = <const Q extends AnyLogicalSelect>(build: (context: QueryContext) => Q) =>
+      Effect.acquireUseRelease(
+        acquireSlot,
+        () => compile(build).pipe(
+          Effect.flatMap((compiled) => Effect.try({
+            try: () => native.prepare(compiled.sql),
+            catch: (cause) => executionError(context.source, "prepare", cause),
+          }).pipe(Effect.map((statement) => ({ statement, compiled })))),
+          Effect.flatMap(({ statement, compiled }) => Effect.try({
+            try: () => statement.all(...compiled.parameters as SQLInputValue[]) as unknown as Readonly<InferResult<Q>>,
+            catch: (cause) => executionError(context.source, "step", cause),
+          })),
+        ),
+        releaseSlot,
+      );
+
+    const explain = <const Q extends AnyLogicalSelect>(build: (context: QueryContext) => Q) =>
+      Effect.acquireUseRelease(
+        acquireSlot,
+        () => compile(build).pipe(
+          Effect.flatMap((compiled) => Effect.try({
+            try: () => native.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`),
+            catch: (cause) => executionError(context.source, "explain", cause),
+          }).pipe(Effect.map((statement) => ({ statement, compiled })))),
+          Effect.flatMap(({ statement, compiled }) => Effect.try({
+            try: () => statement.all(...compiled.parameters as SQLInputValue[]) as unknown as readonly SqliteQueryPlanRow[],
+            catch: (cause) => executionError(context.source, "explain", cause),
+          })),
+        ),
+        releaseSlot,
+      );
+
+    const stream = <const Q extends AnyLogicalSelect>(build: (context: QueryContext) => Q) => Stream.scoped(
+      Stream.fromEffect(Effect.acquireRelease(
+        acquireSlot,
+        releaseSlot,
+      )).pipe(
+        Stream.flatMap(() => Stream.fromEffect(Effect.acquireRelease(
+          compile(build).pipe(
+            Effect.flatMap((compiled) => Effect.try({
+              try: () => native.prepare(compiled.sql),
+              catch: (cause) => executionError(context.source, "prepare", cause),
+            }).pipe(Effect.map((statement) => ({ statement, compiled })))),
+            Effect.flatMap(({ statement, compiled }) => Effect.try({
+              try: () => statement.iterate(...compiled.parameters as SQLInputValue[]),
+              catch: (cause) => executionError(context.source, "step", cause),
+            })),
+          ),
+          (iterator) => Effect.sync(() => { iterator.return?.(); }),
+        )).pipe(
+          Stream.flatMap((iterator) => Stream.unfold(iterator, (current) => Effect.try({
+            try: () => {
+              const next = current.next();
+              return next.done ? undefined : [next.value as InferResult<Q>[number], current] as const;
+            },
+            catch: (cause) => executionError(context.source, "step", cause),
+          }))),
+        )),
+      ),
+    );
+
+    const read: LogicalRead = Object.freeze({
+      source: context.source,
+      capabilities: context.capabilities,
+      provenance,
+      all,
+      stream,
+      explain,
+    });
+    return read;
+  });
+
+  return LogicalQuery.of(Object.freeze({ compile, openRead }));
+}
+
 export function acquireNodeOpenCodeSource(
   config: NodeOpenCodeSourceConfig,
 ): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
@@ -167,13 +314,12 @@ export function acquireNodeOpenCodeSource(
     ({ adapter }) => Effect.sync(() => adapter.close()),
   ).pipe(
     Effect.flatMap((resource) => inspectOpenCodeV2Source(resource.native).pipe(
-      Effect.map((capabilities) => {
+      Effect.flatMap((capabilities) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
         const source = sourceKey(config.sourceID);
-        const query = makeLogicalQuery({
+        const query = makeNodeLogicalQuery({
+          native: resource.native,
           context: { db: logicalWorld(resource.physical), capabilities, source },
-          executor: {
-            execute: (sql, parameters) => resource.adapter.prepare(sql).all(parameters),
-          },
+          semaphore,
         });
         const exposed: NodeOpenCodeSource = {
           query,
@@ -182,7 +328,7 @@ export function acquireNodeOpenCodeSource(
           get closed() { return resource.adapter.closed; },
         };
         return Object.freeze(exposed);
-      }),
+      }))),
     )),
   );
 }
