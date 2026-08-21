@@ -40,6 +40,11 @@ async function reportFixture(): Promise<{ readonly directory: string; readonly p
     JSON.stringify([{ permission: "read" }]),
     JSON.stringify({ id: "model", providerID: "provider", variant: "high" }),
   );
+  fixture.database.exec(`
+    insert into session_v2
+      (id, project_id, slug, directory, title, version, time_created, time_updated)
+    values ('ses_null', 'prj_null', 'nulls', '/work/nulls', null, '2.5', 0, 0)
+  `);
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
   return { directory, path };
@@ -48,12 +53,15 @@ async function reportFixture(): Promise<{ readonly directory: string; readonly p
 test("maps every canonical Session report facet into a checked observation", async () => {
   const fixture = await reportFixture();
   try {
-    const result = await Effect.runPromise(Effect.scoped(
+    const { result, row } = await Effect.runPromise(Effect.scoped(
       acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
         Effect.flatMap(({ query }) => query.openRead),
         Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
           .where("cotail_session.sessionID", "=", "ses_report")).pipe(
-          Effect.map((rows) => decodeSessionReport(rows[0]!, read.source, read.provenance)),
+          Effect.map((rows) => ({
+            row: rows[0]!,
+            result: decodeSessionReport(rows[0]!, read.source, read.provenance),
+          })),
         )),
       ),
     ));
@@ -109,6 +117,46 @@ test("maps every canonical Session report facet into a checked observation", asy
     assert.equal("metadataJSON" in result.value, false);
     assert.equal("permissionJSON" in result.value, false);
     assert.equal("revertJSON" in result.value, false);
+    assert.equal("summaryDiffsJSON" in row, false);
+    assert.equal("metadataJSON" in row, false);
+    assert.equal("permissionJSON" in row, false);
+    assert.equal("revertJSON" in row, false);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("preserves null optional fields and zero-valued counters", async () => {
+  const fixture = await reportFixture();
+  try {
+    const report = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+        Effect.flatMap(({ query }) => query.openRead),
+        Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
+          .where("cotail_session.sessionID", "=", "ses_null")).pipe(
+          Effect.map((rows) => decodeSessionReport(rows[0]!, read.source, read.provenance).value),
+        )),
+      ),
+    ));
+
+    assert.deepEqual(report, {
+      title: null,
+      slug: "nulls",
+      location: {
+        projectID: "prj_null", workspaceID: null, directory: "/work/nulls", path: null,
+      },
+      lineage: { parentSessionID: null, forkSessionID: null, forkBoundary: null },
+      run: { version: "2.5", agent: null, model: null },
+      usage: {
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      },
+      summary: { additions: null, deletions: null, files: null },
+      shareURL: null,
+      lifecycle: {
+        createdAt: 0, updatedAt: 0, compactingAt: null, archivedAt: null, suspendedAt: null,
+      },
+    });
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -129,7 +177,12 @@ test("rejects malformed Session report rows at the decoder seam", async () => {
 
     for (const [field, malformed] of [
       ["sessionID", { ...row, sessionID: " " }],
+      ["parentID", { ...row, parentID: " " }],
       ["tokensInput", { ...row, tokensInput: -1 }],
+      ["tokensOutput", { ...row, tokensOutput: Number.MAX_SAFE_INTEGER + 1 }],
+      ["summaryFiles", { ...row, summaryFiles: -1 }],
+      ["cost", { ...row, cost: Number.POSITIVE_INFINITY }],
+      ["cost", { ...row, cost: -1 }],
       ["updatedAt", { ...row, updatedAt: 1.5 }],
       ["title", { ...row, title: 42 }],
     ] as const) {

@@ -12,11 +12,21 @@ import { sessionID } from "../domain/identifier.ts";
 import type { SessionReportObservation } from "../domain/session-report.ts";
 import type { CotailRelations, SessionRelation } from "../relations/schema.ts";
 
+const sessionReportColumns = [
+  "sessionID", "projectID", "workspaceID", "parentID", "forkSessionID", "forkBoundary",
+  "slug", "directory", "path", "title", "version", "shareURL",
+  "summaryAdditions", "summaryDeletions", "summaryFiles",
+  "cost", "tokensInput", "tokensOutput", "tokensReasoning", "tokensCacheRead", "tokensCacheWrite",
+  "agent", "model", "createdAt", "updatedAt", "compactingAt", "archivedAt", "suspendedAt",
+] as const satisfies readonly (keyof SessionRelation)[];
+
+export type SessionReportRow = Pick<SessionRelation, typeof sessionReportColumns[number]>;
+
 export class SessionReportDecodeError extends Error {
   public readonly sessionID: string | null;
-  public readonly field: keyof SessionRelation;
+  public readonly field: keyof SessionReportRow;
 
-  public constructor(row: SessionRelation, field: keyof SessionRelation, expected: string) {
+  public constructor(row: SessionReportRow, field: keyof SessionReportRow, expected: string) {
     super(`invalid Session report ${String(field)}: expected ${expected}`);
     this.name = "SessionReportDecodeError";
     this.sessionID = typeof row.sessionID === "string" && row.sessionID.trim().length > 0
@@ -26,11 +36,11 @@ export class SessionReportDecodeError extends Error {
   }
 }
 
-const fail = (row: SessionRelation, field: keyof SessionRelation, expected: string): never => {
+const fail = (row: SessionReportRow, field: keyof SessionReportRow, expected: string): never => {
   throw new SessionReportDecodeError(row, field, expected);
 };
 
-function text(row: SessionRelation, field: keyof SessionRelation, nonEmpty = false): string {
+function text(row: SessionReportRow, field: keyof SessionReportRow, nonEmpty = false): string {
   const value = row[field];
   if (typeof value !== "string" || (nonEmpty && value.trim().length === 0)) {
     return fail(row, field, nonEmpty ? "non-empty text" : "text");
@@ -38,12 +48,16 @@ function text(row: SessionRelation, field: keyof SessionRelation, nonEmpty = fal
   return value;
 }
 
-function optionalText(row: SessionRelation, field: keyof SessionRelation): string | null {
+function optionalText(row: SessionReportRow, field: keyof SessionReportRow): string | null {
   const value = row[field];
   return value === null ? null : text(row, field);
 }
 
-function finite(row: SessionRelation, field: keyof SessionRelation): number {
+function optionalID(row: SessionReportRow, field: keyof SessionReportRow): string | null {
+  return row[field] === null ? null : text(row, field, true);
+}
+
+function finite(row: SessionReportRow, field: keyof SessionReportRow): number {
   const value = row[field];
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return fail(row, field, "non-negative finite number");
@@ -51,7 +65,7 @@ function finite(row: SessionRelation, field: keyof SessionRelation): number {
   return value;
 }
 
-function integer(row: SessionRelation, field: keyof SessionRelation): number {
+function integer(row: SessionReportRow, field: keyof SessionReportRow): number {
   const value = row[field];
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     return fail(row, field, "non-negative safe integer");
@@ -59,17 +73,17 @@ function integer(row: SessionRelation, field: keyof SessionRelation): number {
   return value;
 }
 
-function optionalInteger(row: SessionRelation, field: keyof SessionRelation): number | null {
+function optionalInteger(row: SessionReportRow, field: keyof SessionReportRow): number | null {
   return row[field] === null ? null : integer(row, field);
 }
 
 /** The sole base projection for canonical Session reports. */
 export function sessionReportQuery(db: ReadonlyQueryCreator<CotailRelations>) {
-  return db.selectFrom("cotail_session").selectAll("cotail_session");
+  return db.selectFrom("cotail_session").select(sessionReportColumns);
 }
 
 export function decodeSessionReport(
-  row: SessionRelation,
+  row: SessionReportRow,
   source: SourceKey,
   read: ReadProvenance,
 ): SessionReportObservation {
@@ -81,13 +95,13 @@ export function decodeSessionReport(
       slug: text(row, "slug", true),
       location: {
         projectID: text(row, "projectID", true),
-        workspaceID: optionalText(row, "workspaceID"),
+        workspaceID: optionalID(row, "workspaceID"),
         directory: text(row, "directory", true),
         path: optionalText(row, "path"),
       },
       lineage: {
-        parentSessionID: optionalText(row, "parentID"),
-        forkSessionID: optionalText(row, "forkSessionID"),
+        parentSessionID: optionalID(row, "parentID"),
+        forkSessionID: optionalID(row, "forkSessionID"),
         forkBoundary: optionalText(row, "forkBoundary"),
       },
       run: {
