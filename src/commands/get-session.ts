@@ -2,11 +2,14 @@ import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import {
   acquireNodeOpenCodeSource,
-  resolveSession as querySession,
+  findLatestSession,
+  getSession,
   sessionDirectoryExact,
-  sessionIDs,
+  sessionID,
+  SessionNotFoundError,
   type SessionDetails,
   type SessionPredicate,
+  type SessionReportObservation,
 } from "@opencoattails/query-kysely";
 import { parseDirectoryArg } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
@@ -25,6 +28,9 @@ interface Args {
 }
 
 type SessionInfo = SessionDetails & { readonly title: string };
+type SessionLookup =
+  | { readonly kind: "exact"; readonly sessionID: string }
+  | { readonly kind: "latest"; readonly predicate: SessionPredicate };
 
 function fmtLocal(ms: number): string {
   const d = new Date(ms);
@@ -117,19 +123,21 @@ function renderHuman(info: SessionInfo, via: string): void {
 async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: string }> {
   // 1. explicit session id — no resolution needed
   if (args.sessionId) {
-    return loadAndReport(args, sessionIDs([args.sessionId]), "only", `session ${args.sessionId}`);
+    return loadAndReport(args, { kind: "exact", sessionID: args.sessionId }, `session ${args.sessionId}`);
   }
 
   // 2. explicit directory — skip /proc, match the dir
   if (args.directory) {
-    return loadAndReport(args, sessionDirectoryExact(args.directory), "latest", `directory ${args.directory}`);
+    return loadAndReport(args, {
+      kind: "latest", predicate: sessionDirectoryExact(args.directory),
+    }, `directory ${args.directory}`);
   }
 
   // 3. direct env shortcut
   const envSid = process.env.OPENCODE_SESSION_ID;
   const pid = resolvePidInput(args.pid);
   if (envSid && args.pid === undefined) {
-    return loadAndReport(args, sessionIDs([envSid]), "only", `$OPENCODE_SESSION_ID`);
+    return loadAndReport(args, { kind: "exact", sessionID: envSid }, `$OPENCODE_SESSION_ID`);
   }
 
   // 4. PID via /proc
@@ -141,7 +149,7 @@ async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: str
   const proc = readProcInfo(pid);
   const dbPath = args.dbPath ?? proc.db;
   const via = proc.comm ? `pid ${pid} (${proc.comm}) @ ${proc.cwd}` : `pid ${pid} @ ${proc.cwd}`;
-  const info = await loadSession(dbPath, sessionDirectoryExact(proc.cwd), "latest");
+  const info = await loadSession(dbPath, { kind: "latest", predicate: sessionDirectoryExact(proc.cwd) });
   if (!info) {
     throw new Error(`no session found for directory ${proc.cwd} (pid ${pid})`);
   }
@@ -150,26 +158,47 @@ async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: str
 
 async function loadSession(
   dbPath: string | undefined,
-  predicate: SessionPredicate,
-  mode: "latest" | "only",
+  lookup: SessionLookup,
 ): Promise<SessionInfo | undefined> {
   const resolved = discoverDb(dbPath);
   if (!existsSync(resolved)) throw new Error(`db not found: ${resolved}`);
-  const info = await Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path: resolved, sourceID: "cli" }).pipe(
-      Effect.flatMap(({ query }) => querySession(query, { predicate, mode })),
-    ),
-  ));
-  return info === undefined ? undefined : { ...info, title: info.title ?? "" };
+  let observed: SessionReportObservation | undefined;
+  try {
+    observed = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: resolved, sourceID: "cli" }).pipe(
+        Effect.flatMap(({ query }) => lookup.kind === "exact"
+          ? getSession(query, sessionID(lookup.sessionID))
+          : findLatestSession(query, lookup.predicate)),
+      ),
+    ));
+  } catch (error) {
+    if (error instanceof SessionNotFoundError) return undefined;
+    throw error;
+  }
+  return observed === undefined ? undefined : toSessionInfo(observed);
+}
+
+function toSessionInfo(observed: SessionReportObservation): SessionInfo {
+  const report = observed.value;
+  return {
+    id: observed.target.address.sessionID,
+    title: report.title ?? "",
+    directory: report.location.directory,
+    slug: report.slug,
+    projectId: report.location.projectID,
+    parentId: report.lineage.parentSessionID,
+    version: report.run.version,
+    timeCreated: report.lifecycle.createdAt,
+    timeUpdated: report.lifecycle.updatedAt,
+  };
 }
 
 async function loadAndReport(
   args: Args,
-  predicate: SessionPredicate,
-  mode: "latest" | "only",
+  lookup: SessionLookup,
   via: string,
 ): Promise<{ info: SessionInfo; via: string }> {
-  const info = await loadSession(args.dbPath, predicate, mode);
+  const info = await loadSession(args.dbPath, lookup);
   if (!info) throw new Error(`session not found (${via})`);
   return { info, via };
 }
