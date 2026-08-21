@@ -11,7 +11,8 @@ import {
   sessionProjectIDs,
   sessionUpdatedRange,
 } from "../src/direct/session.ts";
-import { resolveSession } from "../src/operations/resolve.ts";
+import type { SessionPredicate } from "../src/direct/session.ts";
+import { findLatestSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
 
@@ -33,10 +34,10 @@ async function predicateFixture(): Promise<{ readonly directory: string; readonl
   return { directory, path };
 }
 
-async function select(path: string, predicate: Parameters<typeof resolveSession>[1]["predicate"]) {
+async function select(path: string, predicate: SessionPredicate) {
   return Effect.runPromise(Effect.scoped(
     acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
-      Effect.flatMap(({ query }) => resolveSession(query, { predicate, mode: "latest" })),
+      Effect.flatMap(({ query }) => findLatestSession(query, predicate)),
     ),
   ));
 }
@@ -47,7 +48,7 @@ test("contextual predicates compose with ordinary Kysely boolean expressions", a
     const project = sessionProjectIDs(["p1"]);
     const range = sessionUpdatedRange({ from: 10, to: 20 });
     const composed = sessionPredicate((context) => context.eb.and([project(context), range(context)]));
-    assert.equal((await select(fixture.path, composed))?.id, "ses_a");
+    assert.equal((await select(fixture.path, composed))?.target.address.sessionID, "ses_a");
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -56,8 +57,8 @@ test("contextual predicates compose with ordinary Kysely boolean expressions", a
 test("directory helpers distinguish exact and contains matching", async () => {
   const fixture = await predicateFixture();
   try {
-    assert.equal((await select(fixture.path, sessionDirectoryExact("/work/app")))?.id, "ses_a");
-    assert.equal((await select(fixture.path, sessionDirectoryContains("/work/app")))?.id, "ses_b");
+    assert.equal((await select(fixture.path, sessionDirectoryExact("/work/app")))?.target.address.sessionID, "ses_a");
+    assert.equal((await select(fixture.path, sessionDirectoryContains("/work/app")))?.target.address.sessionID, "ses_b");
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

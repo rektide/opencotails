@@ -5,7 +5,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
 import { sessionDirectoryExact, sessionIDs } from "../src/direct/session.ts";
-import { resolveSession } from "../src/operations/resolve.ts";
+import { sessionID } from "../src/domain/identifier.ts";
+import {
+  findLatestSession,
+  getSession,
+  listSessions,
+  SessionNotFoundError,
+} from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
 
@@ -29,33 +35,91 @@ async function resolveFixture(): Promise<{ readonly directory: string; readonly 
   return { directory, path };
 }
 
-async function resolve(path: string, request: Parameters<typeof resolveSession>[1]) {
+async function withQuery<A>(path: string, run: (query: Parameters<typeof getSession>[0]) => Effect.Effect<A, unknown>) {
   return Effect.runPromise(Effect.scoped(
     acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
-      Effect.flatMap(({ query }) => resolveSession(query, request)),
+      Effect.flatMap(({ query }) => run(query)),
     ),
   ));
 }
 
-test("latest uses a deterministic Session ID tie-breaker and returns full CLI metadata", async () => {
+test("gets one exact Session observation and reports typed not-found", async () => {
   const fixture = await resolveFixture();
   try {
-    assert.deepEqual(await resolve(fixture.path, { mode: "latest" }), {
-      id: "ses_c", title: "C", directory: "/other", slug: "c", projectId: "p2",
-      parentId: null, version: "2.2", timeCreated: 3, timeUpdated: 20,
-    });
-    assert.equal(await resolve(fixture.path, { predicate: sessionIDs(["ses_legacy"]), mode: "latest" }), undefined);
+    const found = await withQuery(fixture.path, (query) => getSession(query, sessionID("ses_b")));
+    assert.equal(found.target.address.sessionID, "ses_b");
+    assert.equal(found.target.source.sourceID, "fixture");
+    assert.equal(found.value.lineage.parentSessionID, "ses_a");
+    assert.equal(found.value.usage.tokens.input, 0);
+
+    await assert.rejects(
+      withQuery(fixture.path, (query) => getSession(query, sessionID("ses_legacy"))),
+      (error: unknown) => error instanceof SessionNotFoundError && error.sessionID === "ses_legacy",
+    );
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });
 
-test("only returns exactly one match and rejects zero or multiple matches", async () => {
+test("latest is explicitly heuristic and uses a deterministic Session ID tie-breaker", async () => {
   const fixture = await resolveFixture();
   try {
-    assert.equal((await resolve(fixture.path, { predicate: sessionIDs(["ses_b"]), mode: "only" }))?.parentId, "ses_a");
-    assert.equal(await resolve(fixture.path, { predicate: sessionDirectoryExact("/work"), mode: "only" }), undefined);
-    assert.equal(await resolve(fixture.path, { predicate: sessionIDs([]), mode: "only" }), undefined);
+    const latest = await withQuery(fixture.path, (query) => findLatestSession(query));
+    assert.equal(latest?.target.address.sessionID, "ses_c");
+
+    const work = await withQuery(fixture.path, (query) => findLatestSession(query, sessionDirectoryExact("/work")));
+    assert.equal(work?.target.address.sessionID, "ses_b");
+
+    const missing = await withQuery(fixture.path, (query) => findLatestSession(query, sessionIDs([])));
+    assert.equal(missing, undefined);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("lists deterministic keyset pages in either explicit order", async () => {
+  const fixture = await resolveFixture();
+  try {
+    const first = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-desc",
+      page: { first: 2 },
+    }));
+    assert.deepEqual(first.sessions.map((session) => session.target.address.sessionID), ["ses_c", "ses_b"]);
+    assert.deepEqual(first.next, { updatedAt: 20, sessionID: "ses_b" });
+    assert.equal(new Set(first.sessions.map((session) => session.read.readScopeID)).size, 1);
+
+    const second = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-desc",
+      page: { first: 2, after: first.next },
+    }));
+    assert.deepEqual(second.sessions.map((session) => session.target.address.sessionID), ["ses_a"]);
+    assert.equal(second.next, undefined);
+
+    const ascending = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-asc",
+      page: { first: 3 },
+    }));
+    assert.deepEqual(ascending.sessions.map((session) => session.target.address.sessionID), ["ses_a", "ses_b", "ses_c"]);
+    assert.equal(ascending.next, undefined);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects invalid page sizes and cursors before opening a read", async () => {
+  const fixture = await resolveFixture();
+  try {
+    for (const first of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
+        order: "updated-desc", page: { first },
+      }), /positive safe integer/);
+    }
+    assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
+      order: "updated-desc", page: { first: 1, after: { updatedAt: -1, sessionID: "ses_a" } },
+    }), /cursor/);
+    assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
+      order: "updated-desc", page: { first: 1, after: { updatedAt: 1, sessionID: " " } },
+    }), /cursor/);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
