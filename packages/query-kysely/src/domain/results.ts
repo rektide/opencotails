@@ -45,11 +45,6 @@ export interface SessionDetails {
   readonly timeUpdated: number;
 }
 
-export interface HistoryEntry extends SessionDetails {
-  readonly messagesTotal: number;
-  readonly messagesRecent: number;
-}
-
 export interface GroupedSession<Child> {
   readonly session: Located<SessionAddress, SessionSummary>;
   readonly children: readonly Child[];
