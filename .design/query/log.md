@@ -1,5 +1,15 @@
 # Query Design Log
 
+## 2026-08-21
+
+- Added an independent parallel
+  [pushdown draft1 (glm53)](/.design/pushdown/draft1.glm53.md) beside the
+  gpt-5.6 draft1: fixture-verified plan evidence for the unbounded current
+  history aggregate, a negative result for the `IN`-seeded repair, a
+  Kysely-native `crossJoin` + `where` pin that restores indexed owner probes
+  through the logical world, the qualification/enrichment/hydration contract,
+  and a sequenced forward plan. The two draft1s await a synthesis pass.
+
 ## 2026-08-20
 
 - Added [the standalone query execution design](/.design/query2/design2.gpt56.md),

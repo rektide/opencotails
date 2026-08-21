@@ -6,6 +6,12 @@
   - Active pushdown design: separates semantic stage order from physical
   boundedness, records that current history still scans the Message index, adopts
   operation-private Kysely stages plus conformance, and provides the repair plan.
+- [Qualification pushdown contract and pinned-loop enrichment](/.design/pushdown/draft1.glm53.md)
+  - Parallel independent draft1 with executable evidence: tap-probe counts and
+  plans for current, `IN`-seeded, cross-join-pinned, and correlated shapes; a
+  Kysely-native `crossJoin` + `where` repair verified through the logical world;
+  answers to draft0's scope questions and a sequenced forward plan. Awaits
+  synthesis with the draft above.
 - [Initial qualification pushdown brief](/.design/pushdown/draft0.gpt56.md) -
   Superseded handoff that identified the broad-aggregate class of failure and
   framed the qualify/order/window/hydrate problem.

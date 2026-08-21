@@ -426,6 +426,9 @@ tests as sufficient.
 
 ## Cross-References
 
+- [Parallel draft1 (glm53)](/.design/pushdown/draft1.glm53.md) and
+  [draft1 (gpt-5.6)](/.design/pushdown/draft1.gpt56.md) — the two independent
+  answers to this brief; a synthesis pass should reconcile them.
 - [V2 relational query world](/.design/query/design3.gpt56.md) establishes
   arbitrary Kysely composition plus operation-owned stable products.
 - [Scoped execution design](/.design/query2/design2.gpt56.md) guarantees one
