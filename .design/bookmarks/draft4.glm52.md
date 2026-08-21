@@ -473,3 +473,32 @@ unchanged plan.
 - `cotail-session-report` epic in
   [`.beads/issues.jsonl`](/.beads/issues.jsonl) — the authoritative layered
   breakdown this design aligns with.
+
+# Addendum — where this landed after the V2 query world (2026-08-21)
+
+This draft predates the V2 logical query world. Its ideas survived, but in
+different homes. Navigating from here:
+
+- The Address/Target/Observation model in
+  [`.design/query/design3.gpt56.md`](/query/design3.gpt56.md) retained this
+  wave's distinctions (source identity vs descriptor vs lineage vs snapshot vs
+  intent) but replaced the universal `Pointer`/`Composite` framing. The
+  `cotail-bookmarks` epic now targets that model.
+- The layered `SessionInfo` here became the canonical `SessionReport` in
+  [`.design/session-report/full-query-pass0.gpt56.md`](/session-report/full-query-pass0.gpt56.md):
+  the same facets (identity/location/lineage/run/usage/summary/lifecycle), now
+  always-loaded from the `cotail_session` logical relation over `session_v2`
+  rather than capability-detected physical columns. Every session operation
+  there returns `Observation<SessionAddress, SessionReport>` — the exact value
+  a session-grain `BookmarkCapture` should store.
+- Open decision 1 (naming) resolved differently than recommended: the domain
+  model uses capital-ID (`projectID`, `workspaceID`) and machine output is
+  uniformly `snake_case`. Neither option (A) nor (B) as scoped here; the split
+  is domain-versus-machine rather than cotail-versus-upstream.
+- Capability detection is unnecessary in the relation world; v1-shaped rows are
+  the source-compatibility question owned by `cotail-query-world-relations-source`.
+- `SessionCounts` (a `Composite` slot here) is deleted by the session-report
+  pass; history activity now wraps the canonical observation instead.
+- The seed type [`/src/opencode/session-info.ts`](/src/opencode/session-info.ts)
+  no longer exists; the live layout is `src/opencode/{v1,v2}` and
+  `packages/query-kysely`.

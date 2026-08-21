@@ -316,3 +316,31 @@ compatibility aliases remain after their callers move.
   already exposes the direct fields this report projects.
 - [Current operation results](/packages/query-kysely/src/domain/results.ts) are
   the overlapping compatibility shapes this pass replaces.
+- [Durable bookmarks](/.design/query/design3.gpt56.md) (the `Bookmarks` section
+  of the query-world design, tracking epic `cotail-bookmarks`) is the main
+  downstream consumer of this pass: a session-grain `BookmarkCapture` stores
+  exactly the `Observation<SessionAddress, SessionReport>` that every operation
+  here returns, and four-state bookmark resolution (current/changed/missing/
+  source-unavailable) is why the report refuses to invent a content revision.
+  The shared projection and decoder should become the single capture producer.
+- [Bookmark wave draft4](/.design/bookmarks/draft4.glm52.md) is the ancestor of
+  the report shape: its layered `SessionInfo` (identity/run/cost/summary/fork/
+  share/lifecycle) became these nested facets. This pass supersedes two of its
+  open decisions — naming resolves to capital-ID domain fields with uniformly
+  snake_case machine output, and physical column capability detection is
+  dissolved by the `cotail_session` logical relation. Its
+  [`applications`](/.design/bookmarks/applications.glm52.md) consumers
+  (`journal`, `tree`, `diff`) would read these observations.
+- Fork boundary tickets `cotail-fork-point` and `cotail-fork-time` share this
+  pass's typed-decoder prerequisite: the report keeps `forkBoundary` opaque,
+  and both boundary rendering and fork-time lineage must resolve it through
+  `cotail_lineage_edge` ancestor-owned semantics rather than child columns.
+- [Watch research](/.design/watch/README.md) needs the same history activity
+  aggregate (`SessionHistoryItem.activity`) for its activity view, and its
+  compaction-boundary auto-producer watches `lifecycle.compactingAt` — a field
+  this report makes uniformly available.
+- `cotail-end-session` wants a completion bookmark; the canonical observation
+  defined here is what that bookmark would capture and hand to future threads.
+- [History viewer design](/.design/history-viewer/design.md) is the shipped
+  ancestor of the history rebuild. Note the deliberate break: its ISO-8601 JSON
+  timestamps become epoch milliseconds under the uniform machine output rules.
