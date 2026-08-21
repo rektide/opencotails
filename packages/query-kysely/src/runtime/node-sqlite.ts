@@ -107,7 +107,22 @@ interface AcquiredNodeSource {
   readonly physical: Kysely<PhysicalOpenCodeV2>;
 }
 
-function acquire(config: NodeOpenCodeSourceConfig): Effect.Effect<AcquiredNodeSource, SourceOpenError> {
+export type NodeSqliteTestAction =
+  | "begin"
+  | "pin"
+  | "rollback"
+  | "prepare"
+  | "step"
+  | "iterator-return"
+  | "close";
+
+interface NodeSqliteTestHooks {
+  readonly onAction: (action: NodeSqliteTestAction) => void;
+}
+
+function acquire(
+  config: NodeOpenCodeSourceConfig,
+): Effect.Effect<AcquiredNodeSource, SourceOpenError> {
   return Effect.try({
     try: () => {
       let native: DatabaseSync | undefined;
@@ -173,8 +188,9 @@ function makeNodeLogicalQuery(input: {
   readonly native: DatabaseSync;
   readonly context: QueryContext;
   readonly semaphore: Semaphore.Semaphore;
+  readonly hooks?: NodeSqliteTestHooks;
 }): LogicalQueryShape {
-  const { context, native, semaphore } = input;
+  const { context, hooks, native, semaphore } = input;
   const compile = <const Q extends AnyLogicalSelect>(
     build: (context: QueryContext) => Q,
   ): Effect.Effect<CompiledLogicalQuery<InferResult<Q>[number]>, QueryCompileError> => Effect.try({
@@ -197,11 +213,15 @@ function makeNodeLogicalQuery(input: {
     let state: ReadState = "open";
     yield* Effect.acquireRelease(
       Effect.try({
-        try: () => native.exec("BEGIN DEFERRED"),
+        try: () => {
+          hooks?.onAction("begin");
+          native.exec("BEGIN DEFERRED");
+        },
         catch: (cause) => executionError(context.source, "begin", cause),
       }),
       () => Effect.sync(() => {
         try {
+          hooks?.onAction("rollback");
           native.exec("ROLLBACK");
         } finally {
           state = "closed";
@@ -209,7 +229,10 @@ function makeNodeLogicalQuery(input: {
       }),
     );
     yield* Effect.try({
-      try: () => native.prepare("SELECT rootpage FROM sqlite_schema ORDER BY name LIMIT 1").get(),
+      try: () => {
+        hooks?.onAction("pin");
+        native.prepare("SELECT rootpage FROM sqlite_schema ORDER BY name LIMIT 1").get();
+      },
       catch: (cause) => executionError(context.source, "pin", cause),
     });
 
@@ -236,11 +259,17 @@ function makeNodeLogicalQuery(input: {
         acquireSlot,
         () => compile(build).pipe(
           Effect.flatMap((compiled) => Effect.try({
-            try: () => native.prepare(compiled.sql),
+            try: () => {
+              hooks?.onAction("prepare");
+              return native.prepare(compiled.sql);
+            },
             catch: (cause) => executionError(context.source, "prepare", cause),
           }).pipe(Effect.map((statement) => ({ statement, compiled })))),
           Effect.flatMap(({ statement, compiled }) => Effect.try({
-            try: () => statement.all(...compiled.parameters as SQLInputValue[]) as unknown as Readonly<InferResult<Q>>,
+            try: () => {
+              hooks?.onAction("step");
+              return statement.all(...compiled.parameters as SQLInputValue[]) as unknown as Readonly<InferResult<Q>>;
+            },
             catch: (cause) => executionError(context.source, "step", cause),
           })),
         ),
@@ -252,11 +281,17 @@ function makeNodeLogicalQuery(input: {
         acquireSlot,
         () => compile(build).pipe(
           Effect.flatMap((compiled) => Effect.try({
-            try: () => native.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`),
+            try: () => {
+              hooks?.onAction("prepare");
+              return native.prepare(`EXPLAIN QUERY PLAN ${compiled.sql}`);
+            },
             catch: (cause) => executionError(context.source, "explain", cause),
           }).pipe(Effect.map((statement) => ({ statement, compiled })))),
           Effect.flatMap(({ statement, compiled }) => Effect.try({
-            try: () => statement.all(...compiled.parameters as SQLInputValue[]) as unknown as readonly SqliteQueryPlanRow[],
+            try: () => {
+              hooks?.onAction("step");
+              return statement.all(...compiled.parameters as SQLInputValue[]) as unknown as readonly SqliteQueryPlanRow[];
+            },
             catch: (cause) => executionError(context.source, "explain", cause),
           })),
         ),
@@ -271,7 +306,10 @@ function makeNodeLogicalQuery(input: {
         Stream.flatMap(() => Stream.fromEffect(Effect.acquireRelease(
           compile(build).pipe(
             Effect.flatMap((compiled) => Effect.try({
-              try: () => native.prepare(compiled.sql),
+              try: () => {
+                hooks?.onAction("prepare");
+                return native.prepare(compiled.sql);
+              },
               catch: (cause) => executionError(context.source, "prepare", cause),
             }).pipe(Effect.map((statement) => ({ statement, compiled })))),
             Effect.flatMap(({ statement, compiled }) => Effect.try({
@@ -279,10 +317,14 @@ function makeNodeLogicalQuery(input: {
               catch: (cause) => executionError(context.source, "step", cause),
             })),
           ),
-          (iterator) => Effect.sync(() => { iterator.return?.(); }),
+          (iterator) => Effect.sync(() => {
+            hooks?.onAction("iterator-return");
+            iterator.return?.();
+          }),
         )).pipe(
           Stream.flatMap((iterator) => Stream.unfold(iterator, (current) => Effect.try({
             try: () => {
+              hooks?.onAction("step");
               const next = current.next();
               return next.done ? undefined : [next.value as InferResult<Q>[number], current] as const;
             },
@@ -306,12 +348,16 @@ function makeNodeLogicalQuery(input: {
   return LogicalQuery.of(Object.freeze({ compile, openRead }));
 }
 
-export function acquireNodeOpenCodeSource(
+function acquireNodeOpenCodeSourceWithHooks(
   config: NodeOpenCodeSourceConfig,
+  hooks?: NodeSqliteTestHooks,
 ): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
   return Effect.acquireRelease(
     acquire(config),
-    ({ adapter }) => Effect.sync(() => adapter.close()),
+    ({ adapter }) => Effect.sync(() => {
+      adapter.close();
+      hooks?.onAction("close");
+    }),
   ).pipe(
     Effect.flatMap((resource) => inspectOpenCodeV2Source(resource.native).pipe(
       Effect.flatMap((capabilities) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
@@ -320,6 +366,7 @@ export function acquireNodeOpenCodeSource(
           native: resource.native,
           context: { db: logicalWorld(resource.physical), capabilities, source },
           semaphore,
+          hooks,
         });
         const exposed: NodeOpenCodeSource = {
           query,
@@ -331,4 +378,18 @@ export function acquireNodeOpenCodeSource(
       }))),
     )),
   );
+}
+
+export function acquireNodeOpenCodeSource(
+  config: NodeOpenCodeSourceConfig,
+): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
+  return acquireNodeOpenCodeSourceWithHooks(config);
+}
+
+/** @internal Test-only lifecycle instrumentation; not exported from the package root. */
+export function acquireNodeOpenCodeSourceForTest(
+  config: NodeOpenCodeSourceConfig,
+  onAction: (action: NodeSqliteTestAction) => void,
+): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
+  return acquireNodeOpenCodeSourceWithHooks(config, { onAction });
 }

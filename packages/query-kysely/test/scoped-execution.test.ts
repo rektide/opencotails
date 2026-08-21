@@ -8,7 +8,12 @@ import { Cause, Effect, Exit, Fiber, Stream } from "effect";
 import type { AnyLogicalSelect } from "../src/query/logical-query.ts";
 import { all, stream } from "../src/query/logical-query.ts";
 import { QueryExecutionError } from "../src/query/errors.ts";
-import { ReadScopeClosed, acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
+import {
+  ReadScopeClosed,
+  acquireNodeOpenCodeSource,
+  acquireNodeOpenCodeSourceForTest,
+  type NodeSqliteTestAction,
+} from "../src/runtime/node-sqlite.ts";
 import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
 
 async function walFixture(): Promise<{
@@ -73,9 +78,13 @@ test("one read retains a pinned WAL snapshot and later reads get new provenance"
 
 test("statement state rejects overlap, releases after streams, and detects closed reads", async () => {
   const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "state" }).pipe(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "state" },
+        (action) => actions.push(action),
+      ).pipe(
         Effect.flatMap(({ query }) => Effect.gen(function*() {
           const readResult = yield* Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => Effect.gen(function*() {
             let builds = 0;
@@ -106,9 +115,11 @@ test("statement state rejects overlap, releases after streams, and detects close
           }))));
 
           const leaked = yield* Effect.scoped(query.openRead);
+          const preparesBeforeClosedUse = actions.filter((action) => action === "prepare").length;
           const closedExit = yield* Effect.exit(leaked.all(({ db }) =>
             db.selectFrom("cotail_session").select("sessionID")));
-          return { readResult, closedExit };
+          const closedPrepareCount = actions.filter((action) => action === "prepare").length - preparesBeforeClosedUse;
+          return { readResult, closedExit, closedPrepareCount };
         })),
       ),
     ));
@@ -118,6 +129,7 @@ test("statement state rejects overlap, releases after streams, and detects close
     assert.equal(result.readResult.overlap?.reason, "read-scope-busy");
     assert(Exit.isFailure(result.closedExit));
     assert(Cause.squash(result.closedExit.cause) instanceof ReadScopeClosed);
+    assert.equal(result.closedPrepareCount, 0);
   } finally {
     fixture.writer.close();
     await rm(fixture.directory, { recursive: true, force: true });
@@ -157,9 +169,13 @@ test("raw writes fail with retained SQLite context and the scope remains usable"
 
 test("scope-owning stream closes its read after early termination", async () => {
   const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "stream" }).pipe(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "stream" },
+        (action) => actions.push(action),
+      ).pipe(
         Effect.flatMap(({ query }) => Effect.gen(function*() {
           const first = yield* stream(query, ({ db }) => db.selectFrom("cotail_session")
             .select("sessionID").orderBy("sessionID")).pipe(Stream.take(1), Stream.runCollect);
@@ -170,6 +186,8 @@ test("scope-owning stream closes its read after early termination", async () => 
     ));
     assert.equal(result.first.length, 1);
     assert.ok(result.after.length > 0);
+    assert.equal(actions.filter((action) => action === "iterator-return").length, 1);
+    assert.equal(actions.at(-1), "close");
   } finally {
     fixture.writer.close();
     await rm(fixture.directory, { recursive: true, force: true });
@@ -200,9 +218,13 @@ test("waiting read interruption does not strand the source lease", async () => {
 
 test("stream stepping failure releases its iterator and statement slot", async () => {
   const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "stream-failure" }).pipe(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "stream-failure" },
+        (action) => actions.push(action),
+      ).pipe(
         Effect.flatMap(({ query }) => query.openRead.pipe(Effect.flatMap((read) => Effect.gen(function*() {
           const failure = yield* read.stream(({ db }) => db.selectNoFrom((eb) => [
             eb.fn("regexp", [eb.val("["), eb.val("value"), eb.val("")]).as("matched"),
@@ -215,6 +237,38 @@ test("stream stepping failure releases its iterator and statement slot", async (
     assert(result.failure instanceof QueryExecutionError);
     assert.equal(result.failure.phase, "step");
     assert.ok(result.rows.length > 0);
+    assert.equal(actions.filter((action) => action === "iterator-return").length, 1);
+  } finally {
+    fixture.writer.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("pin failure rolls back, releases the lease, and mints no failed provenance", async () => {
+  const fixture = await walFixture();
+  const actions: NodeSqliteTestAction[] = [];
+  let failPin = true;
+  try {
+    const result = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSourceForTest(
+        { path: fixture.path, sourceID: "pin-failure" },
+        (action) => {
+          actions.push(action);
+          if (action === "pin" && failPin) {
+            failPin = false;
+            throw new Error("injected pin failure");
+          }
+        },
+      ).pipe(Effect.flatMap(({ query }) => Effect.gen(function*() {
+        const failure = yield* Effect.scoped(query.openRead).pipe(Effect.flip);
+        const successful = yield* Effect.scoped(query.openRead.pipe(Effect.map((read) => read.provenance)));
+        return { failure, successful };
+      }))),
+    ));
+    assert(result.failure instanceof QueryExecutionError);
+    assert.equal(result.failure.phase, "pin");
+    assert.ok(result.successful.readScopeID.length > 0);
+    assert.deepEqual(actions.slice(0, 4), ["begin", "pin", "rollback", "begin"]);
   } finally {
     fixture.writer.close();
     await rm(fixture.directory, { recursive: true, force: true });
