@@ -86,7 +86,7 @@ Resolve the current active opencode session id for a running opencode process.
 PID resolution (first that applies):
   1. positional <pid> argument
   2. $OPENCODE_PID env var (set by opencode, inherited by tool shells)
-  3. $OPENCODE_SESSION_ID env var (returned directly, no lookup needed)
+  3. $OPENCODE_SESSION_ID env var (validated by exact Session lookup)
 
 The PID's working directory (/proc/<pid>/cwd) is matched against the session
 table's directory, picking the most recently updated session.

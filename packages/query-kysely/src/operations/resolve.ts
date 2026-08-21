@@ -80,8 +80,9 @@ export function findLatestSession(
 }
 
 function validateListRequest(request: ListSessionsRequest): void {
-  if (!Number.isSafeInteger(request.page.first) || request.page.first <= 0) {
-    throw new RangeError("Session page size must be a positive safe integer");
+  if (!Number.isSafeInteger(request.page.first) || request.page.first <= 0
+    || request.page.first >= Number.MAX_SAFE_INTEGER) {
+    throw new RangeError("Session page size must be a positive safe integer below Number.MAX_SAFE_INTEGER");
   }
   const cursor = request.page.after;
   if (cursor !== undefined && (!Number.isSafeInteger(cursor.updatedAt) || cursor.updatedAt < 0

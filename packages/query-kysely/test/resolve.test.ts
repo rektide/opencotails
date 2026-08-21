@@ -82,25 +82,39 @@ test("lists deterministic keyset pages in either explicit order", async () => {
   try {
     const first = await withQuery(fixture.path, (query) => listSessions(query, {
       order: "updated-desc",
-      page: { first: 2 },
+      page: { first: 1 },
     }));
-    assert.deepEqual(first.sessions.map((session) => session.target.address.sessionID), ["ses_c", "ses_b"]);
-    assert.deepEqual(first.next, { updatedAt: 20, sessionID: "ses_b" });
+    assert.deepEqual(first.sessions.map((session) => session.target.address.sessionID), ["ses_c"]);
+    assert.deepEqual(first.next, { updatedAt: 20, sessionID: "ses_c" });
     assert.equal(new Set(first.sessions.map((session) => session.read.readScopeID)).size, 1);
 
     const second = await withQuery(fixture.path, (query) => listSessions(query, {
       order: "updated-desc",
-      page: { first: 2, after: first.next },
+      page: { first: 1, after: first.next },
     }));
-    assert.deepEqual(second.sessions.map((session) => session.target.address.sessionID), ["ses_a"]);
-    assert.equal(second.next, undefined);
+    assert.deepEqual(second.sessions.map((session) => session.target.address.sessionID), ["ses_b"]);
+    assert.deepEqual(second.next, { updatedAt: 20, sessionID: "ses_b" });
+
+    const third = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-desc",
+      page: { first: 1, after: second.next },
+    }));
+    assert.deepEqual(third.sessions.map((session) => session.target.address.sessionID), ["ses_a"]);
+    assert.equal(third.next, undefined);
 
     const ascending = await withQuery(fixture.path, (query) => listSessions(query, {
       order: "updated-asc",
-      page: { first: 3 },
+      page: { first: 2 },
     }));
-    assert.deepEqual(ascending.sessions.map((session) => session.target.address.sessionID), ["ses_a", "ses_b", "ses_c"]);
-    assert.equal(ascending.next, undefined);
+    assert.deepEqual(ascending.sessions.map((session) => session.target.address.sessionID), ["ses_a", "ses_b"]);
+    assert.deepEqual(ascending.next, { updatedAt: 20, sessionID: "ses_b" });
+
+    const ascendingSecond = await withQuery(fixture.path, (query) => listSessions(query, {
+      order: "updated-asc",
+      page: { first: 2, after: ascending.next },
+    }));
+    assert.deepEqual(ascendingSecond.sessions.map((session) => session.target.address.sessionID), ["ses_c"]);
+    assert.equal(ascendingSecond.next, undefined);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -109,7 +123,7 @@ test("lists deterministic keyset pages in either explicit order", async () => {
 test("rejects invalid page sizes and cursors before opening a read", async () => {
   const fixture = await resolveFixture();
   try {
-    for (const first of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    for (const first of [0, -1, 1.5, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
       assert.throws(() => listSessions({} as Parameters<typeof listSessions>[0], {
         order: "updated-desc", page: { first },
       }), /positive safe integer/);
