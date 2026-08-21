@@ -12,6 +12,12 @@ sources:
   - id: scoped-query-design
     resource: /.design/query2/design2.gpt56.md
     title: Cotail standalone query execution
+  - id: scoped-query-implementation
+    resource: /packages/query-kysely/src/runtime/node-sqlite.ts
+    title: Scoped node:sqlite execution implementation
+  - id: scoped-query-tests
+    resource: /packages/query-kysely/test/scoped-execution.test.ts
+    title: Scoped execution behavioral suite
 ---
 
 # Cotail Standalone Query Execution Implementation
@@ -85,13 +91,13 @@ The implementation satisfies the principal success criteria:
 - Package-root exports contain no `DatabaseSync` or `StatementSync` values.
 - Existing CLI behavior remains unchanged under characterization tests.
 
-The suite directly observes rollback after an injected pin failure, exact
-iterator-return counts after early termination and stepping failure, no prepare
-after closure, and source close after stream/read cleanup. The interrupted
-waiter test proves the source remains usable, but does not independently inspect
-the semaphore's internal permit count. Incremental execution follows directly
-from one native `next()` inside `Stream.unfold`; no performance benchmark was
-added.
+The suite directly observes rollback after an injected pin failure, one pull
+for `take(1)`, empty-stream cleanup, exact iterator-return counts after early
+termination, stepping failure, and interruption between pulls, no prepare after
+closure or leaked-stream consumption, and source close after stream/read
+cleanup. The interrupted-waiter test also holds a later read while checking that
+a concurrent waiter cannot reach native `BEGIN`, detecting an accidentally
+released extra permit.
 
 Operational spans, fingerprints, benchmarks, deadlines, pooling, and a hosted
 provider remain intentionally deferred as specified.
@@ -100,7 +106,7 @@ provider remain intentionally deferred as specified.
 
 Verification on Node `26.6.0`:
 
-- `pnpm --filter @opencoattails/query-kysely check`: 53 tests and strict
+- `pnpm --filter @opencoattails/query-kysely check`: 54 tests and strict
   TypeScript checking passed after lifecycle instrumentation was added.
 - `pnpm --filter @opencoattails/query-runtime test`: 6 tests passed.
 - `pnpm --filter @opencoattails/query-runtime typecheck`: passed.
@@ -108,6 +114,11 @@ Verification on Node `26.6.0`:
 - An independent standards/spec review identified lifecycle observability and
   report completeness gaps; the report was completed and native action hooks
   were added in response.
+
+The supported minimum is Node 24, but this workspace only provided Node 26.6.0.
+Cross-version verification of native iterator `return()` remains tracked as
+`cotail-query-read-scope-node-matrix`; the implementation does not claim that
+matrix has run locally.
 
 ## Cross-References
 
