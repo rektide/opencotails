@@ -212,6 +212,32 @@ proves a Session was created by a subagent tool.
 Session-level projected counters are authoritative. Message-level counters remain
 available for turn analysis but are not silently re-summed as a replacement.
 
+## Durable Session Capture
+
+The operation layer also produces a storage-neutral, versioned
+`SessionReportCapture` for bookmarks, end-session closures, handoffs, and
+exports. This belongs here because all consumers must use the same report
+projection and comparison semantics; persistence remains outside the query
+package.
+
+```ts
+interface SessionReportCapture {
+  readonly schema: "cotail.session-report.capture/v1";
+  readonly capturedAt: number;
+  readonly target: Target<SessionAddress>;
+  readonly report: SessionReport;
+  readonly guard: { readonly updatedAt: number };
+}
+```
+
+Capture runs under one `LogicalRead`, uses the shared projection and decoder,
+and records `lifecycle.updatedAt` as its initial comparison guard. The durable
+wire value omits `ReadScopeID`: read provenance correlates observations from one
+pinned read but is not a source revision. Capture includes no transcript text,
+search evidence, or lineage tree by default. Richer closure and handoff artifacts
+compose separately typed operation products rather than widening
+`SessionReport` with optional slots.
+
 ## Output Architecture
 
 Each command defines one serializer-neutral output specification containing an
@@ -277,7 +303,8 @@ Examples:
 6. Add compact human usage and the remaining basic direct fields.
 7. Delete `SessionSummary`, `SessionDetails`, `HistoryEntry`, `SessionCounts`,
    repeated projections, and command-local machine DTOs.
-8. Add child usage analysis only after `cotail_lineage_edge` lands.
+8. Add versioned Session report capture over the same projection/decoder.
+9. Add child usage analysis only after `cotail_lineage_edge` lands.
 
 Each migration commit must leave all commands and package tests passing. No
 compatibility aliases remain after their callers move.
@@ -293,6 +320,8 @@ compatibility aliases remain after their callers move.
   values, and timestamp semantics.
 - Token formatter table tests cover unit boundaries, rounding promotion, signs,
   zero, and values through `P`.
+- Session capture round-trips the exact report and rejects use of read-scope IDs
+  as comparison guards.
 - Child analysis tests cover direct children, descendants, depth limits, cycles,
   dangling edges, and aggregate overflow policy.
 
@@ -323,14 +352,13 @@ compatibility aliases remain after their callers move.
   here returns, and four-state bookmark resolution (current/changed/missing/
   source-unavailable) is why the report refuses to invent a content revision.
   The shared projection and decoder should become the single capture producer.
-- [Bookmark wave draft4](/.design/bookmarks/draft4.glm52.md) is the ancestor of
-  the report shape: its layered `SessionInfo` (identity/run/cost/summary/fork/
-  share/lifecycle) became these nested facets. This pass supersedes two of its
-  open decisions — naming resolves to capital-ID domain fields with uniformly
-  snake_case machine output, and physical column capability detection is
-  dissolved by the `cotail_session` logical relation. Its
-  [`applications`](/.design/bookmarks/applications.glm52.md) consumers
-  (`journal`, `tree`, `diff`) would read these observations.
+- [Durable reference and bookmark design](/.design/bookmarks/draft5.gpt56.md) is
+  the active downstream persistence design. It assigns capture production to
+  this operation layer and retires bookmark-owned `Pointer`, `Composite`, and
+  descriptor projections. [Bookmark wave draft4](/.design/bookmarks/draft4.glm52.md)
+  remains the ancestor of the report facets; its naming and physical capability
+  decisions are superseded by capital-ID domain fields, snake_case machine
+  output, and the validated `cotail_session` logical relation.
 - Fork boundary tickets `cotail-fork-point` and `cotail-fork-time` share this
   pass's typed-decoder prerequisite: the report keeps `forkBoundary` opaque,
   and both boundary rendering and fork-time lineage must resolve it through

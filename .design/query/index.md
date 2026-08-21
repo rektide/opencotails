@@ -9,6 +9,10 @@
   - Active breaking refinement of the operation-product layer: one Session
   report observation, explicit cardinality and pagination, shared machine-output
   specifications, compact usage presentation, and bounded child analysis.
+- [Durable reference and bookmark design](/.design/bookmarks/draft5.gpt56.md) -
+  Active persistence consumer of the query world. It reuses Target, Observation,
+  evidence, and SessionReport while owning source relocation, bookmark intent,
+  typed captures, local persistence, and live resolution.
 - [Standalone query execution](/.design/query2/design2.gpt56.md) - Active
   `node:sqlite` direction: scoped reads, truthful provenance, stable snapshots,
   conventional Effect streaming, explain diagnostics, and direct migration.

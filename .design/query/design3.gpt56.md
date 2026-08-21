@@ -923,6 +923,15 @@ The bookmark store is cotail authority and has its own writable Layer and
 migrations. It never writes the OpenCode database. Bookmark IDs identify
 bookmarks, not source entities, and do not appear in `Address`.
 
+[The replacement bookmark design](/.design/bookmarks/draft5.gpt56.md) narrows
+this section into delivery scope after the Session operation rewrite. It adds
+`found` for uncaptured bookmarks, because `current` requires an actual
+comparison; rejects read-scope provenance as a durable revision; assigns Session
+capture production to the canonical report operation; and makes a persistent
+source catalog the first bookmark-owned prerequisite. Earlier `Pointer`,
+`Composite`, descriptor, physical-capability, and multi-store proposals remain
+superseded design lineage.
+
 ## Effect Architecture
 
 ### Services
