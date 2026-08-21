@@ -32,19 +32,29 @@ sources:
 Stop treating this as a local history optimization. It is a core query-product
 design problem.
 
-The current canonical history migration is committed and passes its behavioral
-tests, but its Message aggregate groups the entire logical Message relation on
-every invocation before the outer query discards groups for Sessions that do not
-qualify. An independent review identified the broad scan. A follow-up request to
-implement an obvious qualified-Session CTE fix did not run because the requested
-subagent reached its usage limit. **No pushdown fix has been committed.**
+The canonical history migration was committed with a Message aggregate that
+grouped the entire logical Message relation before the outer query discarded
+groups for Sessions that did not qualify. An independent review identified the
+broad scan. A follow-up request initially reported a subagent usage-limit
+failure, but its work appeared later as two concurrent commits:
+
+- `c3e02b37` — restrict the history aggregate through a qualified-Session CTE;
+- `44cd7899` — reject fractional CLI limits instead of truncating them.
+
+The first commit implements the obvious history-local candidate described below
+and adds compiled-SQL plus fixture-plan assertions. It has **not** been accepted
+as the general pushdown design. History remains open and blocked on the design
+work in this brief. Do not confuse "a plausible local fix now exists" with
+"Cotail has a qualification-pushdown discipline."
 
 The next session should design the general rule before editing history.
 
-Current relevant commits, in order:
+Relevant commits, in order:
 
 - `41b9c017` — rebuild Session history around canonical reports;
-- `87b8be39` — remove the orphaned `HistoryEntry` compatibility type.
+- `87b8be39` — remove the orphaned `HistoryEntry` compatibility type;
+- `c3e02b37` — apply the qualified-Session CTE candidate;
+- `44cd7899` — tighten history CLI limit parsing.
 
 The tracker issue `cotail-session-report-history` remains in progress. Its
 current behavior is correct, but its plan can do work proportional to all
@@ -68,11 +78,10 @@ powerful. That makes accidental broad work especially dangerous:
 The failure is not "we forgot an index." It is that the operation's relational
 shape places qualification and limiting outside an aggregation barrier.
 
-## Current History Shape
+## Triggering History Shape
 
-[`sessionHistoryQuery`](/packages/query-kysely/src/operations/history.ts) starts
-from the canonical Session report query, applies a Session predicate, and then
-left-joins this derived relation:
+The original canonical-history commit started from the Session report query,
+applied a Session predicate, and then left-joined this derived relation:
 
 ```sql
 select
@@ -111,8 +120,12 @@ cotail history --since 24h --limit 20
 ```
 
 the expected work shape is close to "qualify at most the recent Session page,
-then count Messages belonging to those Sessions." The current shape is "count
-Messages for every Session, then keep 20 groups."
+then count Messages belonging to those Sessions." The triggering shape was
+"count Messages for every Session, then keep 20 groups."
+
+The current file now contains the late qualified-Session candidate rather than
+this triggering query. Retain the old shape in this brief because it demonstrates
+the class of bug the new design and conformance suite must prevent elsewhere.
 
 ## What The Recent Query Work Did
 
@@ -162,7 +175,8 @@ This is likely the correct history rewrite because Message counts do not
 participate in Session qualification or ordering. Counting after the Session
 page is chosen preserves the current result.
 
-It is **not yet accepted as the general design**. Before implementation, verify:
+Commit `c3e02b37` now implements this candidate. It is **not yet accepted as the
+general design**. Before accepting history or extracting a shared seam, verify:
 
 - SQLite materializes or co-routines the CTE in a way that actually restricts
   Message access;
@@ -271,7 +285,7 @@ The next design should audit at least:
 | Operation / relation | Qualification source | Related work | Pushdown risk to investigate |
 |---|---|---|---|
 | Session exact/latest/list | Session row | report projection | Low; baseline root operations. |
-| History | Session predicate/order/window | Message aggregate | Current known broad aggregation. |
+| History | Session predicate/order/window | Message aggregate | Triggering broad aggregate has a qualified-CTE candidate; evaluate semantics, plan evidence, and generality. |
 | Direct search | witnesses over documents | evidence ranking/hydration | Staged today; verify global and per-Session limits. |
 | Future FTS search | index matches/rank | live recheck and evidence | Rank and freshness can block naïve root-first limiting. |
 | Child usage | lineage recursion | report and usage aggregation | Depth/root qualification must restrict recursion and totals. |
@@ -386,7 +400,8 @@ tests as sufficient.
 
 > Design Cotail's qualification-pushdown discipline across domain operations.
 > Start from `.design/pushdown/draft0.gpt56.md`, the V2 query-world design, and
-> current history/direct-search implementations. Determine when root
+> current history/direct-search implementations. Treat commit `c3e02b37` as a
+> candidate, not an accepted architecture. Determine when root
 > qualification/order/window may safely precede related aggregation or
 > hydration, and how operation interfaces plus conformance tests can guarantee
 > bounded work without replacing Kysely with a custom query algebra. Audit
@@ -397,8 +412,9 @@ tests as sufficient.
 ## Handoff Checklist
 
 - Read this brief before changing `history.ts`.
-- Inspect the current history compiled SQL and fixture plan, not the live user
-  database.
+- Inspect the current history candidate's compiled SQL and fixture plan, not the
+  live user database, and compare them to the triggering broad shape recorded
+  here.
 - Read direct search's staged CTE implementation as prior art.
 - Confirm physical indexes from authoritative OpenCode schema/source fixtures,
   using archive source before web retrieval.
@@ -419,7 +435,8 @@ tests as sufficient.
   requires a grouped history aggregate but did not specify qualification
   pushdown strongly enough.
 - [Current history implementation](/packages/query-kysely/src/operations/history.ts)
-  contains the known broad aggregate.
+  contains the late qualified-Session CTE candidate that still requires design
+  review.
 - [Direct search implementation](/packages/query-kysely/src/operations/direct-search.ts)
   is existing qualify/window/hydrate prior art.
 - [Logical relation world](/packages/query-kysely/src/relations/world.ts) must be
