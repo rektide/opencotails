@@ -2,6 +2,10 @@
 
 ## Start Here
 
+- [Qualification pushdown brief](/.design/pushdown/draft0.gpt56.md) - Critical
+  active handoff: current canonical history groups all Messages before discarding
+  unqualified Sessions. Frames the general qualify/order/window/hydrate problem,
+  required operation audit, design alternatives, and plan/work-count evidence.
 - [`design3.gpt56.md`](/query/design3.gpt56.md) - Implemented V2 relational query
   direction: public logical Kysely relations, hierarchical identity, witnesses,
   evidence, grouped products, and Effect-owned execution.
