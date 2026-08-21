@@ -715,3 +715,6 @@ contract.
   retained by the standalone implementation.
 - [Query runtime registry](/packages/query-runtime/src/registry.ts) remains an
   optional outer acquisition mechanism and does not own read transactions.
+- [The implementation report](/.design/query2/implementation0.gpt56.md) records
+  the delivered module shape, lifecycle evidence, review findings, and final
+  verification for Cuts 1 and 2.
