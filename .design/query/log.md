@@ -1,5 +1,15 @@
 # Query Design Log
 
+## 2026-08-29
+
+- Added [demand-bounded operation planning](/.design/pushdown/draft2-syn.gpt56t.md),
+  a standalone synthesis based on the current operations, logical world, source
+  contract, and prior probe evidence. It defines candidate restriction plus
+  qualification/window frontiers, operation-specific cost envelopes, indexed
+  access-path conformance, a pinned history repair, and a separate direct-search
+  audit. It also records why existing asymmetric `tap()` counts and wall-clock
+  ratios are corroboration rather than correctness gates.
+
 ## 2026-08-21
 
 - Added an independent parallel

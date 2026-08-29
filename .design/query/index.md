@@ -2,16 +2,19 @@
 
 ## Start Here
 
+- [Demand-bounded operation planning](/.design/pushdown/draft2-syn.gpt56t.md)
+  - Standalone pushdown synthesis grounded in current code and fixture evidence:
+    candidate restriction, qualification and window frontiers, explicit cost
+    envelopes, indexed access-path conformance, and the pinned history repair.
 - [Qualification staging and bounded enrichment](/.design/pushdown/draft1.gpt56.md)
-  - Active pushdown design: separates semantic stage order from physical
+  - Prior pushdown draft: separates semantic stage order from physical
   boundedness, records that current history still scans the Message index, adopts
   operation-private Kysely stages plus conformance, and provides the repair plan.
 - [Qualification pushdown contract and pinned-loop enrichment](/.design/pushdown/draft1.glm53.md)
-  - Parallel independent draft1 with executable evidence: tap-probe counts and
+  - Prior independent draft1 with executable evidence: tap-probe counts and
   plans for current, `IN`-seeded, cross-join-pinned, and correlated shapes; a
   Kysely-native `crossJoin` + `where` repair verified through the logical world;
-  answers to draft0's scope questions and a sequenced forward plan. Awaits
-  synthesis with the draft above.
+  answers to draft0's scope questions and a sequenced forward plan.
 - [Initial qualification pushdown brief](/.design/pushdown/draft0.gpt56.md) -
   Superseded handoff that identified the broad-aggregate class of failure and
   framed the qualify/order/window/hydrate problem.
