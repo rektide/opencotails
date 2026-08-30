@@ -2,6 +2,13 @@
 
 ## 2026-08-29
 
+- Added [demand-bounded operation planning with certified access paths](/.design/pushdown/draft3.gpt56s.md),
+  integrating the pushdown wave around candidate restriction, separate
+  qualification/window frontiers, narrowest-identity enrichment and hydration,
+  source-profile-specific cost envelopes, and fail-closed physical certificates.
+  It accepts the root-driven history aggregate, preserves current CLI limit
+  semantics, incorporates measured logical-world predicate reach, and assigns a
+  separate candidate/child-window/hydration audit to direct search.
 - Added [demand-bounded operation planning](/.design/pushdown/draft2-syn.gpt56t.md),
   a standalone synthesis based on the current operations, logical world, source
   contract, and prior probe evidence. It defines candidate restriction plus

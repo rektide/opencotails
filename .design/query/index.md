@@ -2,8 +2,13 @@
 
 ## Start Here
 
+- [Demand-bounded operation planning with certified access paths](/.design/pushdown/draft3.gpt56s.md)
+  - Active integrated pushdown design: candidate restriction, qualification and
+    window frontiers, narrowest-identity downstream work, explicit cost
+    envelopes, indexed/degraded source profiles, fail-closed plan conformance,
+    and the accepted pinned history repair.
 - [Demand-bounded operation planning](/.design/pushdown/draft2-syn.gpt56t.md)
-  - Standalone pushdown synthesis grounded in current code and fixture evidence:
+  - Prior standalone synthesis grounded in current code and fixture evidence:
     candidate restriction, qualification and window frontiers, explicit cost
     envelopes, indexed access-path conformance, and the pinned history repair.
 - [Qualification staging and bounded enrichment](/.design/pushdown/draft1.gpt56.md)
