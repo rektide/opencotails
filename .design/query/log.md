@@ -1,5 +1,15 @@
 # Query Design Log
 
+## 2026-08-30
+
+- Added [generated source profiles and demand-bounded queries](/.design/pushdown/draft4.gpt56s.md),
+  replacing hot-path schema/index/type discovery with trusted generated JSON,
+  compact OpenCode version allowlists checked through `opencode --version`, and
+  explicit profile generation/validation. The encompassing design retains
+  candidate/qualification/window planning, accepts the root-driven history
+  repair, scopes the direct-search rewrite, and distinguishes which remaining
+  costs profiles or demand-bounded construction do and do not solve.
+
 ## 2026-08-29
 
 - Added [demand-bounded operation planning with certified access paths](/.design/pushdown/draft3.gpt56s.md),

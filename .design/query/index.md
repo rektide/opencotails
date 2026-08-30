@@ -2,8 +2,13 @@
 
 ## Start Here
 
+- [Generated source profiles and demand-bounded queries](/.design/pushdown/draft4.gpt56s.md)
+  - Active encompassing design: trusted generated OpenCode profiles, compact
+    `opencode --version` compatibility contracts, explicit generation and
+    validation, derived index capabilities, removal of hot-path Message-type
+    scans, and operation-owned demand-bounded history/search plans.
 - [Demand-bounded operation planning with certified access paths](/.design/pushdown/draft3.gpt56s.md)
-  - Active integrated pushdown design: candidate restriction, qualification and
+  - Prior integrated pushdown design: candidate restriction, qualification and
     window frontiers, narrowest-identity downstream work, explicit cost
     envelopes, indexed/degraded source profiles, fail-closed plan conformance,
     and the accepted pinned history repair.
