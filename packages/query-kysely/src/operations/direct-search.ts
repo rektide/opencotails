@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { sql } from "kysely";
+import type { ReadonlyQueryCreator } from "kysely/readonly";
 import type { DocumentWitness, WitnessName } from "../direct/witness.ts";
 import type { SessionPredicate } from "../direct/session.ts";
 import { sessionContext } from "./session-context.ts";
@@ -12,6 +13,7 @@ import {
   sessionAddress,
   sourceKey,
   target,
+  type SourceKey,
 } from "../domain/address.ts";
 import { observation, projectionRevision } from "../domain/observation.ts";
 import type {
@@ -23,7 +25,7 @@ import type {
 import { sessionID } from "../domain/identifier.ts";
 import type { ReadProvenance } from "../domain/observation.ts";
 import type { LogicalQueryShape, QueryError } from "../query/logical-query.ts";
-import type { DocumentRelation } from "../relations/schema.ts";
+import type { CotailRelations, DocumentRelation } from "../relations/schema.ts";
 
 export interface DirectSessionSearch {
   readonly witnesses: readonly DocumentWitness[];
@@ -47,8 +49,8 @@ interface SearchRow extends DocumentRelation {
   readonly witnessOrder: number | null;
   readonly sessionRank: number | null;
   readonly sessionTotal: number | null;
-  readonly sourceJSON: string | null;
-  readonly messageType: string | null;
+  readonly sourceJSON?: string | null;
+  readonly messageType?: string | null;
 }
 
 const documentColumns = [
@@ -134,7 +136,7 @@ function decodeRows(
     group.returned++;
     if (!request.evidence) continue;
     const documentTarget = mapDocumentTarget(sourceKey(row.sourceID), row);
-    if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON === null || row.messageType === null)) {
+    if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON == null || row.messageType == null)) {
       throw new RowDecodeError("Message-owned evidence has no source revision", row.documentKey);
     }
     const revision = row.messageID === null
@@ -162,14 +164,22 @@ function decodeRows(
   })));
 }
 
-export function searchDirectSessions(
-  query: LogicalQueryShape,
+/**
+ * Session roots are restricted by root-local facts, qualified by every
+ * witness, and only then windowed. Matching-document rank and totals follow
+ * selected Sessions; revision payload hydration follows selected hits and is
+ * absent outside evidence mode. Witness qualification over the document world
+ * remains the intentionally unbounded-by-page residual.
+ */
+export function directSessionSearchQuery(
+  db: ReadonlyQueryCreator<CotailRelations>,
+  source: SourceKey,
   request: DirectSessionSearch,
-): Effect.Effect<readonly GroupedSession<DirectEvidence>[], DirectSearchError> {
+) {
   validate(request);
-  return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all(({ db, source }) => db
-    .with("qualified_sessions", (qb) => {
-      let sessions = qb.selectFrom("cotail_session")
+  const staged = db
+    .with("candidate_sessions", (qb) => {
+      let candidates = qb.selectFrom("cotail_session")
         .select([
           "cotail_session.sessionID",
           "cotail_session.projectID as sessionProjectID",
@@ -181,17 +191,11 @@ export function searchDirectSessions(
           sql<string>`${source.sourceID}`.as("sourceID"),
         ]);
       if (request.sessionPredicate !== undefined) {
-        sessions = sessions.where((eb) => request.sessionPredicate!(sessionContext(eb)));
-      }
-      for (const witness of request.witnesses) {
-        sessions = sessions.where((eb) => witness.forSession({
-          eb,
-          sessionID: eb.ref("cotail_session.sessionID"),
-        }));
+        candidates = candidates.where((eb) => request.sessionPredicate!(sessionContext(eb)));
       }
       const cursor = request.window.sessions.after;
       if (cursor !== undefined) {
-        sessions = sessions.where((eb) => eb.or([
+        candidates = candidates.where((eb) => eb.or([
           eb("cotail_session.updatedAt", "<", cursor.updatedAt),
           eb.and([
             eb("cotail_session.updatedAt", "=", cursor.updatedAt),
@@ -199,30 +203,39 @@ export function searchDirectSessions(
           ]),
         ]));
       }
-      return sessions
-        .orderBy("cotail_session.updatedAt", "desc")
-        .orderBy("cotail_session.sessionID", "desc")
-        .limit(request.window.sessions.first);
+      return candidates;
     })
+    .with("witness_qualified_sessions", (qb) => {
+      let qualified = qb.selectFrom("candidate_sessions").selectAll();
+      for (const witness of request.witnesses) {
+        qualified = qualified.where((eb) => witness.forSession({
+          eb,
+          sessionID: eb.ref("candidate_sessions.sessionID"),
+        }));
+      }
+      return qualified;
+    })
+    .with("selected_sessions", (qb) => qb
+      .selectFrom("witness_qualified_sessions")
+      .selectAll()
+      .orderBy("sessionUpdatedAt", "desc")
+      .orderBy("sessionID", "desc")
+      .limit(request.window.sessions.first))
     .with("matching_documents", (qb) => {
       const branch = (witness: DocumentWitness, witnessOrder: number) => qb
-        .selectFrom("cotail_document")
-        .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_document.sessionID")
-        .leftJoin("cotail_message as evidence_message", (join) => join
-          .onRef("evidence_message.sessionID", "=", "cotail_document.sessionID")
-          .onRef("evidence_message.messageID", "=", "cotail_document.messageID"))
+        .selectFrom("selected_sessions")
+        .crossJoin("cotail_document")
+        .whereRef("cotail_document.sessionID", "=", "selected_sessions.sessionID")
         .where(witness.matches)
         .select([
           ...documentColumns.map((column) => `cotail_document.${column}` as const),
-          "qualified_sessions.sessionProjectID",
-          "qualified_sessions.sessionSlug",
-          "qualified_sessions.sessionTitle",
-          "qualified_sessions.sessionDirectory",
-          "qualified_sessions.sessionCreatedAt",
-          "qualified_sessions.sessionUpdatedAt",
-          "qualified_sessions.sourceID",
-          "evidence_message.sourceJSON",
-          "evidence_message.messageType",
+          "selected_sessions.sessionProjectID",
+          "selected_sessions.sessionSlug",
+          "selected_sessions.sessionTitle",
+          "selected_sessions.sessionDirectory",
+          "selected_sessions.sessionCreatedAt",
+          "selected_sessions.sessionUpdatedAt",
+          "selected_sessions.sourceID",
           sql<string>`${witness.name}`.as("witnessName"),
           sql<number>`${witnessOrder}`.as("witnessOrder"),
         ]);
@@ -247,7 +260,7 @@ export function searchDirectSessions(
       .select("sessionID")
       .select((eb) => eb.fn.max("sessionTotal").as("sessionTotal"))
       .groupBy("sessionID"))
-    .with("session_hits", (qb) => {
+    .with("selected_hits", (qb) => {
       let hits = qb.selectFrom("ranked_documents")
         .where("sessionRank", "<=", request.window.childrenPerSession)
         .selectAll()
@@ -258,33 +271,79 @@ export function searchDirectSessions(
         .orderBy("witnessName");
       if (request.window.globalHitLimit !== undefined) hits = hits.limit(request.window.globalHitLimit);
       return hits;
-    })
-    .selectFrom("qualified_sessions")
-    .leftJoin("session_hits", "session_hits.sessionID", "qualified_sessions.sessionID")
-    .leftJoin("session_totals", "session_totals.sessionID", "qualified_sessions.sessionID")
+    });
+
+  const sessionColumns = [
+    "selected_sessions.sourceID",
+    "selected_sessions.sessionID",
+    "selected_sessions.sessionProjectID",
+    "selected_sessions.sessionSlug",
+    "selected_sessions.sessionTitle",
+    "selected_sessions.sessionDirectory",
+    "selected_sessions.sessionCreatedAt",
+    "selected_sessions.sessionUpdatedAt",
+  ] as const;
+  const hitColumns = documentColumns.filter((column) => column !== "sessionID")
+    .map((column) => `selected_hits.${column}` as const);
+
+  if (!request.evidence) {
+    return staged
+      .selectFrom("selected_sessions")
+      .leftJoin("selected_hits", "selected_hits.sessionID", "selected_sessions.sessionID")
+      .leftJoin("session_totals", "session_totals.sessionID", "selected_sessions.sessionID")
+      .select([
+        ...sessionColumns,
+        ...hitColumns,
+        "selected_hits.witnessName",
+        "selected_hits.witnessOrder",
+        "selected_hits.sessionRank",
+        "session_totals.sessionTotal",
+      ])
+      .orderBy("selected_sessions.sessionUpdatedAt", "desc")
+      .orderBy("selected_sessions.sessionID", "desc")
+      .orderBy("selected_hits.sessionRank")
+      .orderBy("selected_hits.documentKey");
+  }
+
+  return staged
+    .with("hydrated_hits", (qb) => qb
+      .selectFrom("selected_hits")
+      .leftJoin("cotail_message as evidence_message", (join) => join
+        .onRef("evidence_message.sessionID", "=", "selected_hits.sessionID")
+        .onRef("evidence_message.messageID", "=", "selected_hits.messageID"))
+      .selectAll("selected_hits")
+      .select([
+        (eb) => sql<string | null>`case when ${eb.ref("evidence_message.messageID")} is null then null
+          else cotail_validate_message(${eb.ref("evidence_message.messageID")},
+            ${eb.ref("evidence_message.messageType")}, ${eb.ref("evidence_message.sourceJSON")}) end`.as("sourceJSON"),
+        "evidence_message.messageType",
+      ]))
+    .selectFrom("selected_sessions")
+    .leftJoin("hydrated_hits as selected_hits", "selected_hits.sessionID", "selected_sessions.sessionID")
+    .leftJoin("session_totals", "session_totals.sessionID", "selected_sessions.sessionID")
     .select([
-      "qualified_sessions.sourceID",
-      "qualified_sessions.sessionID",
-      "qualified_sessions.sessionProjectID",
-      "qualified_sessions.sessionSlug",
-      "qualified_sessions.sessionTitle",
-      "qualified_sessions.sessionDirectory",
-      "qualified_sessions.sessionCreatedAt",
-      "qualified_sessions.sessionUpdatedAt",
-      ...documentColumns.filter((column) => column !== "sessionID")
-        .map((column) => `session_hits.${column}` as const),
-      "session_hits.witnessName",
-      "session_hits.witnessOrder",
-      "session_hits.sessionRank",
+      ...sessionColumns,
+      ...hitColumns,
+      "selected_hits.witnessName",
+      "selected_hits.witnessOrder",
+      "selected_hits.sessionRank",
       "session_totals.sessionTotal",
-      "session_hits.sourceJSON",
-      "session_hits.messageType",
+      "selected_hits.sourceJSON",
+      "selected_hits.messageType",
     ])
-    .orderBy("qualified_sessions.sessionUpdatedAt", "desc")
-    .orderBy("qualified_sessions.sessionID", "desc")
-    .orderBy("session_hits.sessionRank")
-    .orderBy("session_hits.documentKey"),
-  ).pipe(
+    .orderBy("selected_sessions.sessionUpdatedAt", "desc")
+    .orderBy("selected_sessions.sessionID", "desc")
+    .orderBy("selected_hits.sessionRank")
+    .orderBy("selected_hits.documentKey");
+}
+
+export function searchDirectSessions(
+  query: LogicalQueryShape,
+  request: DirectSessionSearch,
+): Effect.Effect<readonly GroupedSession<DirectEvidence>[], DirectSearchError> {
+  validate(request);
+  return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all(({ db, source }) =>
+    directSessionSearchQuery(db, source, request)).pipe(
     Effect.flatMap((rows) => Effect.try({
       try: () => decodeRows(rows as unknown as readonly SearchRow[], request, read.provenance),
       catch: (cause) => cause instanceof RowDecodeError
