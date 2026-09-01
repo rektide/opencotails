@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -45,11 +45,15 @@ async function fixture(t: TestContext): Promise<Fixture> {
   return { directory, database, executable, invocations, profile };
 }
 
-function cli(args: readonly string[], input: Fixture): Promise<CliResult> {
+function cli(
+  args: readonly string[],
+  input: Fixture,
+  environment: Readonly<Record<string, string>> = {},
+): Promise<CliResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["src/cli.ts", ...args], {
       cwd: new URL("..", import.meta.url),
-      env: { ...process.env, PROFILE_INVOCATION_LOG: input.invocations, TZ: "UTC" },
+      env: { ...process.env, PROFILE_INVOCATION_LOG: input.invocations, TZ: "UTC", ...environment },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -239,7 +243,84 @@ test("profile refresh preserves profile identity and source path while replacing
 
 test("ordinary commands do not invoke OpenCode for profile discovery or validation", async (t) => {
   const input = await fixture(t);
-  const result = await cli(["search", "Alpha", "--title-only", "--json", "--db", input.database], input);
+  assert.equal((await generate(input)).status, 0);
+  await writeFile(input.invocations, "");
+  await rm(input.executable);
+  const database = new DatabaseSync(input.database);
+  database.exec(`
+    DROP TABLE kv;
+    INSERT INTO session_message VALUES (
+      'msg_future', 'ses_other_abcdefghijkl', 'future-message', 1, 1, 1, '{}'
+    );
+  `);
+  database.close();
+
+  const result = await cli([
+    "search", "Alpha", "--title-only", "--json",
+    "--profile", input.profile,
+  ], input);
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /ses_newest_abcdefghijkl/u);
+  assert.equal(await readFile(input.invocations, "utf8"), "");
+});
+
+test("ordinary commands use the conventional XDG profile when --profile is omitted", async (t) => {
+  const input = await fixture(t);
+  assert.equal((await generate(input)).status, 0);
+  await writeFile(input.invocations, "");
+  const configHome = join(input.directory, "config");
+  const conventional = join(configHome, "cotail", "profiles", "opencode-local.json");
+  await mkdir(join(configHome, "cotail", "profiles"), { recursive: true });
+  await writeFile(conventional, await readFile(input.profile));
+
+  const result = await cli([
+    "get-session", "-s", "ses_newest_abcdefghijkl", "--id-only",
+  ], input, { XDG_CONFIG_HOME: configHome });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, "ses_newest_abcdefghijkl\n");
+  assert.equal(await readFile(input.invocations, "utf8"), "");
+});
+
+test("ordinary commands report missing and malformed profiles with exact generation commands", async (t) => {
+  const input = await fixture(t);
+  const missing = join(input.directory, "missing.json");
+  const missingResult = await cli([
+    "history", "--profile", missing, "--db", input.database,
+  ], input);
+  assert.equal(missingResult.status, 1);
+  assert.equal(missingResult.stderr,
+    `source profile not found: ${missing}\n`
+    + "Generate it with:\n"
+    + `cotail profile generate --db '${input.database}' --opencode opencode --output '${missing}' --name opencode-local\n`);
+  assert.equal(await readFile(input.invocations, "utf8"), "");
+
+  const malformed = join(input.directory, "malformed.json");
+  await writeFile(malformed, "{\n");
+  const malformedResult = await cli([
+    "get-session", "-s", "ses_newest_abcdefghijkl",
+    "--profile", malformed,
+    "--db", input.database,
+  ], input);
+  assert.equal(malformedResult.status, 1);
+  assert.equal(malformedResult.stderr.startsWith(`source profile is malformed: ${malformed}\n`), true);
+  assert.match(malformedResult.stderr, /Regenerate it with:\ncotail profile generate --db /u);
+  assert.equal(await readFile(input.invocations, "utf8"), "");
+});
+
+test("a stale profile fails through the requested SQLite operation without validation fallback", async (t) => {
+  const input = await fixture(t);
+  assert.equal((await generate(input)).status, 0);
+  await writeFile(input.invocations, "");
+  const staleDatabase = join(input.directory, "stale.db");
+  const database = new DatabaseSync(staleDatabase);
+  database.exec("CREATE TABLE unrelated (id TEXT PRIMARY KEY)");
+  database.close();
+
+  const result = await cli([
+    "history", "--profile", input.profile, "--db", staleDatabase,
+  ], input);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /no such table: session_v2/u);
+  assert.doesNotMatch(result.stderr, /profile validation|V1-only|migration|refresh/u);
   assert.equal(await readFile(input.invocations, "utf8"), "");
 });

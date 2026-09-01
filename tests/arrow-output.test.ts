@@ -7,10 +7,13 @@ import { DatabaseSync } from "node:sqlite";
 import test, { after } from "node:test";
 import { Table, tableFromIPC } from "apache-arrow";
 import { createCliDatabase } from "./fixtures/cli-database.ts";
+import { writeCliSourceProfile } from "./fixtures/source-profile.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "cotail-arrow-"));
 const database = join(directory, "fixture.db");
 createCliDatabase(database);
+const profile = join(directory, "fixture-profile.json");
+await writeCliSourceProfile(database, profile);
 const fixture = new DatabaseSync(database);
 fixture.prepare("INSERT INTO session VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
   "ses_unicode_abcdefghijkl",
@@ -27,7 +30,7 @@ fixture.close();
 after(() => rmSync(directory, { recursive: true, force: true }));
 
 function cli(args: readonly string[]) {
-  return spawnSync(process.execPath, ["src/cli.ts", ...args], {
+  return spawnSync(process.execPath, ["src/cli.ts", ...args, "--profile", profile], {
     cwd: new URL("..", import.meta.url),
     encoding: "buffer",
     env: { ...process.env, TZ: "UTC" },

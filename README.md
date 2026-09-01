@@ -5,9 +5,9 @@
 Use it to find sessions by content, inspect recent work, or resolve the session associated with a running OpenCode process.
 
 ```sh
-cotail search "migration" "sqlite"
-cotail history --since 7d
-cotail get-session --id-only
+cotail search "migration" "sqlite" --profile ~/.config/cotail/profiles/opencode-local.json
+cotail history --since 7d --profile ~/.config/cotail/profiles/opencode-local.json
+cotail get-session --id-only --profile ~/.config/cotail/profiles/opencode-local.json
 ```
 
 ## Status
@@ -20,9 +20,9 @@ The current CLI is an early `0.1.0` release with three working commands:
 | `cotail history` | List sessions active within a time window |
 | `cotail get-session` | Resolve a Session from an ID, directory, or OpenCode process |
 
-Queries scan OpenCode's live database directly. There is no index or build step, and no `index` or `status` command yet.
+Queries read OpenCode's live database directly using a trusted generated source profile. There is no Cotail data index or build step, and no `index` or `status` command yet.
 
-Cotail supports OpenCode's authoritative V2 projections: `session_v2` and `session_message`. V1-only databases are rejected. Completed migrations may retain V1 tables, but those rows never affect results.
+Cotail supports OpenCode's authoritative V2 projections: `session_v2` and `session_message`. Profiles generated from V2 sources record that contract. If a trusted profile is later pointed at a V1-only or otherwise stale database, the requested query fails naturally. Completed migrations may retain V1 tables, but those rows never affect results.
 
 ## Requirements
 
@@ -30,6 +30,7 @@ Cotail supports OpenCode's authoritative V2 projections: `session_v2` and `sessi
 - Node.js 24 or newer for native SQLite busy timeouts and direct TypeScript execution
 - pnpm for installing this workspace
 - An OpenCode database using the V2 session schema
+- A generated Cotail source profile for that database
 
 Cotail uses Node's built-in `node:sqlite`; it does not install a native SQLite binding.
 
@@ -39,6 +40,11 @@ The project is currently run from a checkout:
 
 ```sh
 pnpm install
+pnpm exec cotail profile generate \
+  --db ~/.local/share/opencode/opencode.db \
+  --opencode opencode \
+  --output ~/.config/cotail/profiles/opencode-local.json \
+  --name opencode-local
 pnpm exec cotail history --since 24h
 ```
 
@@ -48,17 +54,34 @@ You can also run the TypeScript entry point directly:
 node src/cli.ts history --since 24h
 ```
 
-## Database Selection
+## Source Profiles
 
-Commands select a database in this order:
+`search`, `history`, and `get-session` require a strictly decoded source profile. They select one in this order:
 
-1. The command's `--db <path>` option.
-2. The `OPENCODE_DB` environment variable.
-3. The newest `opencode*.db` file by modification time under `~/.local/share/opencode`.
+1. The command's `--profile <path>` option.
+2. `$XDG_CONFIG_HOME/cotail/profiles/opencode-local.json`, or `~/.config/cotail/profiles/opencode-local.json` when `XDG_CONFIG_HOME` is unset.
 
-Every connection is opened read-only and placed in SQLite `query_only` mode.
+The selected profile supplies the database path, supported Message variants, and query capabilities. `--db <path>` is an explicit locator override only; Cotail does not compare it with the path or facts in the profile.
 
-Cotail validates the required V2 tables, columns, migration state, and known Message variants before exposing a query source. Deep Message payload validation runs only when content is queried.
+Normal commands trust every decoded profile fact unchanged. They do not invoke `opencode`, compare profile metadata with the current Cotail build, inspect SQLite schema, indexes, migrations, Message variants, or query plans, refresh implicitly, or fall back to runtime discovery. A missing profile reports the exact `cotail profile generate ...` command needed to create it. Stale profiles fail naturally through ordinary SQLite or lazy payload-decoding errors.
+
+Every database connection is opened read-only and placed in SQLite `query_only` mode. Deep per-payload validation remains lazy and runs only when content is queried.
+
+### Profile Lifecycle
+
+Profile inspection is always explicit:
+
+```sh
+cotail profile generate --db ~/.local/share/opencode/opencode.db \
+  --opencode opencode \
+  --output ~/.config/cotail/profiles/opencode-local.json \
+  --name opencode-local
+cotail profile show --profile ~/.config/cotail/profiles/opencode-local.json
+cotail profile validate --profile ~/.config/cotail/profiles/opencode-local.json --all
+cotail profile refresh --profile ~/.config/cotail/profiles/opencode-local.json
+```
+
+`generate` and `refresh` inspect the selected executable and database. `validate` performs only its explicit selectors (`--version`, `--schema`, `--indexes`, `--content`, `--plans`, or `--all`) and never runs as part of an ordinary query.
 
 ## Search
 
@@ -87,7 +110,8 @@ cotail search sqlite --arrow > hits.arrow
 
 | Option | Meaning |
 |---|---|
-| `--db <path>` | Use an explicit OpenCode database |
+| `--profile <path>` | Use an explicit trusted source profile |
+| `--db <path>` | Override the database locator recorded in the profile |
 | `--limit <n>` | Return at most `n` Sessions; default `50` |
 | `--json` | Emit JSON Lines |
 | `--arrow` | Emit an Apache Arrow IPC stream |
@@ -137,7 +161,8 @@ cotail history --arrow > history.arrow
 | `--json` | Emit JSON Lines |
 | `--tsv` | Emit tab-separated rows with a header |
 | `--arrow` | Emit an Apache Arrow IPC stream |
-| `--db <path>` | Use an explicit OpenCode database |
+| `--profile <path>` | Use an explicit trusted source profile |
+| `--db <path>` | Override the database locator recorded in the profile |
 
 The output distinguishes Messages created at or after the cutoff (`RECENT`) from all Messages in the Session (`TOTAL`). Both counts use only V2 `session_message` rows.
 
@@ -175,7 +200,8 @@ When PID metadata provides `OPENCODE_DB`, that path is used for the process look
 |---|---|
 | `-s`, `--session <id>` | Resolve an exact Session ID |
 | `-C`, `--directory <dir>` | Resolve the latest Session for an exact directory |
-| `--db <path>` | Use an explicit OpenCode database |
+| `--profile <path>` | Use an explicit trusted source profile |
+| `--db <path>` | Override the database locator recorded in the profile |
 | `--json` | Emit the Session as JSON Lines |
 | `--id-only` | Print only the Session ID |
 | `--arrow` | Emit an Apache Arrow IPC stream |
@@ -217,7 +243,7 @@ flowchart LR
 - Scoped buffered, streaming, compile, and SQLite query-plan operations over one pinned read snapshot.
 - Contextual Session predicates and alias-safe named document witnesses.
 - Checked evidence mapping, payload revisions, grouping, and deterministic limits.
-- Effect-scoped `node:sqlite` source, transaction, and iterator acquisition with exact-once cleanup.
+- Effect-scoped `node:sqlite` source, trusted profile facts, transaction, and iterator acquisition with exact-once cleanup.
 
 [`@opencoattails/query-runtime`](/packages/query-runtime/src/index.ts) provides the typed registry used to compose scoped query implementations and capabilities.
 
@@ -236,8 +262,8 @@ pnpm install
 Run the CLI directly from TypeScript during development:
 
 ```sh
-pnpm exec cotail search sqlite
-pnpm exec cotail history --since 24h
+pnpm exec cotail search sqlite --profile ~/.config/cotail/profiles/opencode-local.json
+pnpm exec cotail history --since 24h --profile ~/.config/cotail/profiles/opencode-local.json
 ```
 
 Run the quality gates:
@@ -249,7 +275,7 @@ pnpm --dir packages/query-kysely check
 pnpm --dir packages/query-runtime test
 ```
 
-The root tests characterize CLI text, JSONL, TSV, and Arrow output. Query package tests cover source validation, inference, relations, witnesses, evidence, limits, lifecycle, and read-only enforcement.
+The root tests characterize CLI text, JSONL, TSV, Arrow output, and trusted-profile selection. Query package tests cover explicit source validation, trusted runtime acquisition, inference, relations, witnesses, evidence, limits, lifecycle, and read-only enforcement.
 
 Temporary experiments belong under `.test-agent/`. Design work and accepted architectural records live under `.design/`.
 

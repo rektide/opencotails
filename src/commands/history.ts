@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import {
   acquireNodeOpenCodeSource,
@@ -10,9 +9,9 @@ import {
 } from "@opencoattails/query-kysely";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
-import { discoverDb } from "../opencode/db.ts";
 import type { SessionCounts } from "../opencode/types.ts";
 import { emitHistoryArrow } from "../arrow.ts";
+import { resolveRuntimeSource } from "../profile/runtime.ts";
 
 interface Args {
   since: string;
@@ -22,6 +21,7 @@ interface Args {
   tsv: boolean;
   arrow: boolean;
   dbPath?: string;
+  profilePath?: string;
 }
 
 function fmtLocal(ms: number): string {
@@ -38,6 +38,7 @@ function parseArgs(argv: string[]): Args {
   let tsv = false;
   let arrow = false;
   let dbPath: string | undefined;
+  let profilePath: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--since") {
@@ -66,6 +67,11 @@ function parseArgs(argv: string[]): Args {
       if (dbPath === undefined) throw new Error("--db requires a path");
       continue;
     }
+    if (a === "--profile") {
+      profilePath = argv[++i];
+      if (profilePath === undefined) throw new Error("--profile requires a path");
+      continue;
+    }
     if (a === "--json") { json = true; continue; }
     if (a === "--tsv") { tsv = true; continue; }
     if (a === "--arrow") { arrow = true; continue; }
@@ -77,7 +83,7 @@ function parseArgs(argv: string[]): Args {
   }
   if (arrow && json) throw new Error("--arrow cannot be combined with --json");
   if (arrow && tsv) throw new Error("--arrow cannot be combined with --tsv");
-  return { since, limit, directory, json, tsv, arrow, dbPath };
+  return { since, limit, directory, json, tsv, arrow, dbPath, profilePath };
 }
 
 export function printHelp(): void {
@@ -92,7 +98,8 @@ Options:
   --json             Output JSONL (one object per line)
   --tsv              Output tab-separated rows with a header line
   --arrow            Output Apache Arrow IPC stream
-  --db <path>        Database path (default: auto-discover)
+  --profile <path>   Trusted source profile (default: XDG opencode-local profile)
+  --db <path>        Database locator override (default: path recorded in profile)
 
 Examples:
   cotail history                      # last 24h
@@ -156,26 +163,15 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(2);
   }
 
-  let dbPath: string;
   try {
-    dbPath = discoverDb(args.dbPath);
-  } catch (e) {
-    console.error((e as Error).message);
-    process.exit(1);
-  }
-  if (!existsSync(dbPath)) {
-    console.error(`db not found: ${dbPath}`);
-    process.exit(1);
-  }
-
-  try {
+    const source = await resolveRuntimeSource({ databasePath: args.dbPath, profilePath: args.profilePath });
     const predicates: SessionPredicate[] = [sessionUpdatedRange({ from: cutoff })];
     if (args.directory !== undefined) predicates.push(sessionDirectoryContains(args.directory));
     const predicate = sessionPredicate((context) => context.eb.and(
       predicates.map((candidate) => candidate(context)),
     ));
     const entries = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: dbPath, sourceID: "cli" }).pipe(Effect.flatMap(({ query }) => readSessionHistory(query, {
+      acquireNodeOpenCodeSource({ ...source, sourceID: "cli" }).pipe(Effect.flatMap(({ query }) => readSessionHistory(query, {
         predicate,
         since: cutoff,
         limit: args.limit === 0 ? undefined : args.limit,

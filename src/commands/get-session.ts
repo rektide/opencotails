@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import {
   acquireNodeOpenCodeSource,
@@ -13,15 +12,16 @@ import {
 } from "@opencoattails/query-kysely";
 import { parseDirectoryArg } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
-import { discoverDb } from "../opencode/db.ts";
 import { readProcInfo, resolvePidInput } from "../opencode/pid.ts";
 import { emitSessionArrow } from "../arrow.ts";
+import { resolveRuntimeSource } from "../profile/runtime.ts";
 
 interface Args {
   pid: string | undefined;
   directory: string | undefined;
   sessionId: string | undefined;
   dbPath: string | undefined;
+  profilePath: string | undefined;
   json: boolean;
   idOnly: boolean;
   arrow: boolean;
@@ -43,6 +43,7 @@ function parseArgs(argv: string[]): Args {
   let directory: string | undefined;
   let sessionId: string | undefined;
   let dbPath: string | undefined;
+  let profilePath: string | undefined;
   let json = false;
   let idOnly = false;
   let arrow = false;
@@ -51,6 +52,11 @@ function parseArgs(argv: string[]): Args {
     if (a === "--db") {
       dbPath = argv[++i];
       if (dbPath === undefined) throw new Error("--db requires a path");
+      continue;
+    }
+    if (a === "--profile") {
+      profilePath = argv[++i];
+      if (profilePath === undefined) throw new Error("--profile requires a path");
       continue;
     }
     if (a === "--directory" || a === "-C") {
@@ -75,7 +81,7 @@ function parseArgs(argv: string[]): Args {
   }
   if (arrow && json) throw new Error("--arrow cannot be combined with --json");
   if (arrow && idOnly) throw new Error("--arrow cannot be combined with --id-only");
-  return { pid, directory, sessionId, dbPath, json, idOnly, arrow };
+  return { pid, directory, sessionId, dbPath, profilePath, json, idOnly, arrow };
 }
 
 export function printHelp(): void {
@@ -94,7 +100,8 @@ table's directory, picking the most recently updated session.
 Options:
   -s, --session <id>    Use this session id directly (skip PID resolution)
   -C, --directory <dir> Override the directory to match (skip /proc lookup)
-  --db <path>           Database path (default: auto-discover)
+  --profile <path>      Trusted source profile (default: XDG opencode-local profile)
+  --db <path>           Database locator override (default: path recorded in profile)
   --json                Output the full session object as JSONL
   --id-only             Print only the session id (scripting-friendly)
   --arrow               Output Apache Arrow IPC stream
@@ -149,7 +156,7 @@ async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: str
   const proc = readProcInfo(pid);
   const dbPath = args.dbPath ?? proc.db;
   const via = proc.comm ? `pid ${pid} (${proc.comm}) @ ${proc.cwd}` : `pid ${pid} @ ${proc.cwd}`;
-  const info = await loadSession(dbPath, { kind: "latest", predicate: sessionDirectoryExact(proc.cwd) });
+  const info = await loadSession(dbPath, args.profilePath, { kind: "latest", predicate: sessionDirectoryExact(proc.cwd) });
   if (!info) {
     throw new Error(`no session found for directory ${proc.cwd} (pid ${pid})`);
   }
@@ -158,14 +165,14 @@ async function resolveSession(args: Args): Promise<{ info: SessionInfo; via: str
 
 async function loadSession(
   dbPath: string | undefined,
+  profilePath: string | undefined,
   lookup: SessionLookup,
 ): Promise<SessionInfo | undefined> {
-  const resolved = discoverDb(dbPath);
-  if (!existsSync(resolved)) throw new Error(`db not found: ${resolved}`);
+  const source = await resolveRuntimeSource({ databasePath: dbPath, profilePath });
   let observed: SessionReportObservation | undefined;
   try {
     observed = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: resolved, sourceID: "cli" }).pipe(
+      acquireNodeOpenCodeSource({ ...source, sourceID: "cli" }).pipe(
         Effect.flatMap(({ query }) => lookup.kind === "exact"
           ? getSession(query, sessionID(lookup.sessionID))
           : findLatestSession(query, lookup.predicate)),
@@ -198,7 +205,7 @@ async function loadAndReport(
   lookup: SessionLookup,
   via: string,
 ): Promise<{ info: SessionInfo; via: string }> {
-  const info = await loadSession(args.dbPath, lookup);
+  const info = await loadSession(args.dbPath, args.profilePath, lookup);
   if (!info) throw new Error(`session not found (${via})`);
   return { info, via };
 }

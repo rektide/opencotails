@@ -5,16 +5,19 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test, { after } from "node:test";
 import { createCliDatabase, createV1OnlyCliDatabase } from "./fixtures/cli-database.ts";
+import { writeCliSourceProfile } from "./fixtures/source-profile.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "cotail-characterization-"));
 const database = join(directory, "fixture.db");
 createCliDatabase(database);
+const profile = join(directory, "fixture-profile.json");
+await writeCliSourceProfile(database, profile);
 const v1Database = join(directory, "v1.db");
 createV1OnlyCliDatabase(v1Database);
 after(() => rmSync(directory, { recursive: true, force: true }));
 
 function cli(args: readonly string[]) {
-  return spawnSync(process.execPath, ["src/cli.ts", ...args], {
+  return spawnSync(process.execPath, ["src/cli.ts", ...args, "--profile", profile], {
     cwd: new URL("..", import.meta.url),
     encoding: "utf8",
     env: { ...process.env, TZ: "UTC" },
@@ -79,7 +82,7 @@ test("lookup preserves id, JSONL, and not-found behavior", () => {
   assert.equal(missing.stderr, "session not found (session missing)\n");
 });
 
-test("all production query commands reject V1-only databases", () => {
+test("a profile used with a stale V1-only locator fails naturally in the requested query", () => {
   for (const args of [
     ["search", "alpha", "--db", v1Database],
     ["history", "--db", v1Database],
@@ -87,7 +90,8 @@ test("all production query commands reject V1-only databases", () => {
   ]) {
     const result = cli(args);
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /OpenCode V1-only databases are not query sources/);
+    assert.match(result.stderr, /no such table: session_v2/);
+    assert.doesNotMatch(result.stderr, /V1-only|migration|profile validation/);
   }
 });
 
@@ -107,5 +111,5 @@ test("parse and database errors preserve exit statuses", () => {
   assert.equal(noTerms.status, 1);
   const missing = cli(["history", "--db", join(directory, "missing.db")]);
   assert.equal(missing.status, 1);
-  assert.equal(missing.stderr, `db not found: ${join(directory, "missing.db")}\n`);
+  assert.equal(missing.stderr, "unable to open database file\n");
 });

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { Effect } from "effect";
 import {
   acquireNodeOpenCodeSource,
@@ -15,13 +14,14 @@ import {
 } from "@opencoattails/query-kysely";
 import { parseDirectoryArg, parseSince } from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
-import { discoverDb } from "../opencode/db.ts";
 import type { PartType, SearchHit } from "../opencode/types.ts";
 import { emitSearchArrow } from "../arrow.ts";
+import { resolveRuntimeSource, type RuntimeSourceSelection } from "../profile/runtime.ts";
 
 interface Args {
   terms: string[];
   dbPath?: string;
+  profilePath?: string;
   limit: number;
   json: boolean;
   arrow: boolean;
@@ -53,7 +53,7 @@ function selection(args: Args): SessionPredicate | undefined {
     : sessionPredicate((context) => context.eb.and(predicates.map((predicate) => predicate(context))));
 }
 
-async function searchRows(path: string, args: Args): Promise<SearchHit[]> {
+async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<SearchHit[]> {
   const fields: readonly DocumentField[] = args.titleOnly ? ["session.title"] : SEARCH_FIELDS[args.typeFilter];
   const witnesses = args.terms.map((term, index) => documentWitness(
     witnessName(`term-${String(index).padStart(6, "0")}`),
@@ -65,7 +65,7 @@ async function searchRows(path: string, args: Args): Promise<SearchHit[]> {
     ]),
   ));
   const groups = await Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "cli" }).pipe(
+    acquireNodeOpenCodeSource({ ...source, sourceID: "cli" }).pipe(
       Effect.flatMap(({ query }) => args.limit === 0
         ? Effect.succeed([] as const)
         : searchDirectSessions(query, {
@@ -120,6 +120,7 @@ function renderHuman(rows: SearchHit[], showSnippet: boolean): void {
 function parseArgs(argv: string[]): Args {
   const terms: string[] = [];
   let dbPath: string | undefined;
+  let profilePath: string | undefined;
   let limit = 50;
   let json = false;
   let arrow = false;
@@ -135,6 +136,11 @@ function parseArgs(argv: string[]): Args {
     if (a === "--db") {
       dbPath = argv[++i];
       if (dbPath === undefined) throw new Error("--db requires a path");
+      continue;
+    }
+    if (a === "--profile") {
+      profilePath = argv[++i];
+      if (profilePath === undefined) throw new Error("--profile requires a path");
       continue;
     }
     if (a === "--limit") {
@@ -175,7 +181,7 @@ function parseArgs(argv: string[]): Args {
     terms.push(a);
   }
   if (arrow && json) throw new Error("--arrow cannot be combined with --json");
-  return { terms, dbPath, limit, json, arrow, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
+  return { terms, dbPath, profilePath, limit, json, arrow, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
 }
 
 export function printHelp(): void {
@@ -185,7 +191,8 @@ Search opencode sessions for content matching ALL given terms.
 Terms are matched as case-insensitive regular expressions (AND'd together).
 
 Options:
-  --db <path>      Database path (default: auto-discover)
+  --profile <path> Trusted source profile (default: XDG opencode-local profile)
+  --db <path>      Database locator override (default: path recorded in profile)
   --limit <n>      Max results (default: 50)
   --json           Output JSONL instead of human-readable
   --arrow          Output Apache Arrow IPC stream
@@ -222,20 +229,9 @@ export async function run(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  let dbPath: string;
   try {
-    dbPath = discoverDb(args.dbPath);
-  } catch (e) {
-    console.error((e as Error).message);
-    process.exit(1);
-  }
-  if (!existsSync(dbPath)) {
-    console.error(`db not found: ${dbPath}`);
-    process.exit(1);
-  }
-
-  try {
-    const rows = await searchRows(dbPath, args);
+    const source = await resolveRuntimeSource({ databasePath: args.dbPath, profilePath: args.profilePath });
+    const rows = await searchRows(source, args);
     if (args.arrow) await emitSearchArrow(rows);
     else if (args.json) emitJsonl(rows);
     else renderHuman(rows, args.showSnippet);
