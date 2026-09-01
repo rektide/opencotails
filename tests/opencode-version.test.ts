@@ -41,6 +41,7 @@ test("version parsing rejects prose, malformed output, and ambiguous versions", 
   assert.throws(() => parseOpenCodeVersionOutput("", "opencode version cache stale\n"), /could not parse/u);
   assert.throws(() => parseOpenCodeVersionOutput("diagnostic only\n"), /could not parse/u);
   assert.throws(() => parseOpenCodeVersionOutput("1.18.4\n1.18.5\n"), /ambiguous/u);
+  assert.throws(() => parseOpenCodeVersionOutput("1.18.4\n", "opencode2 v1.18.5\n"), /ambiguous/u);
 });
 
 test("version execution bounds output and reaps a process that ignores SIGTERM", async (t) => {

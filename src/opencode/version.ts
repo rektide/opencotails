@@ -45,7 +45,7 @@ function selectVersion(values: readonly string[]): string | undefined {
 }
 
 export function parseOpenCodeVersionOutput(stdout: string, stderr = ""): string {
-  const parsed = selectVersion(candidates(stdout)) ?? selectVersion(candidates(stderr));
+  const parsed = selectVersion([...candidates(stdout), ...candidates(stderr)]);
   if (parsed !== undefined) return parsed;
   throw new OpenCodeVersionError("could not parse OpenCode version output");
 }
