@@ -195,6 +195,10 @@ export function decodeSourceProfile(value: unknown): SourceProfile {
   const generator = object(root.generator, "$.generator", ["name", "version", "contracts"]);
   const contracts = object(generator.contracts, "$.generator.contracts", ["history", "direct_search"]);
   const opencode = object(root.opencode, "$.opencode", ["executable", "generated_with", "compatible_versions"]);
+  const compatibleVersions = stringArray(opencode.compatible_versions, "$.opencode.compatible_versions");
+  if (compatibleVersions.length === 0) {
+    throw new SourceProfileDecodeError("$.opencode.compatible_versions", "expected at least one version");
+  }
   const source = object(root.source, "$.source", ["kind", "path"]);
   const content = object(root.content, "$.content", ["supported_message_variants", "observed_message_variants"]);
   const capabilitiesValue = object(root.capabilities, "$.capabilities", Object.keys(record(root.capabilities) ? root.capabilities : {}));
@@ -227,7 +231,7 @@ export function decodeSourceProfile(value: unknown): SourceProfile {
     opencode: {
       executable: text(opencode.executable, "$.opencode.executable"),
       generated_with: text(opencode.generated_with, "$.opencode.generated_with"),
-      compatible_versions: stringArray(opencode.compatible_versions, "$.opencode.compatible_versions"),
+      compatible_versions: compatibleVersions,
     },
     source: {
       kind: literal(source.kind, "$.source.kind", ["opencode-v2"] as const),

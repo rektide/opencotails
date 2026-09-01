@@ -163,6 +163,10 @@ test("strictly decodes complete profiles without rebuilding supported variants",
     (malformed.source as Record<string, unknown>).unexpected = true;
     assert.throws(() => decodeSourceProfile(malformed), SourceProfileDecodeError);
 
+    const noCompatibleVersion = structuredClone(profile) as unknown as Record<string, unknown>;
+    (noCompatibleVersion.opencode as Record<string, unknown>).compatible_versions = [];
+    assert.throws(() => decodeSourceProfile(noCompatibleVersion), /expected at least one version/u);
+
     const inconsistent = {
       ...structuredClone(profile),
       content: {
