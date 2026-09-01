@@ -191,7 +191,12 @@ export function decodeSourceProfile(value: unknown): SourceProfile {
   const profileID = text(root.profile_id, "$.profile_id");
   if (!/^[A-Za-z0-9._-]+$/u.test(profileID)) throw new SourceProfileDecodeError("$.profile_id", "contains unsupported characters");
   const generatedAt = text(root.generated_at, "$.generated_at");
-  if (Number.isNaN(Date.parse(generatedAt))) throw new SourceProfileDecodeError("$.generated_at", "expected ISO timestamp");
+  const generatedDate = new Date(generatedAt);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(generatedAt)
+    || Number.isNaN(generatedDate.valueOf())
+    || generatedDate.toISOString() !== generatedAt) {
+    throw new SourceProfileDecodeError("$.generated_at", "expected canonical ISO timestamp");
+  }
   const generator = object(root.generator, "$.generator", ["name", "version", "contracts"]);
   const contracts = object(generator.contracts, "$.generator.contracts", ["history", "direct_search"]);
   const opencode = object(root.opencode, "$.opencode", ["executable", "generated_with", "compatible_versions"]);

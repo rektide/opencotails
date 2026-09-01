@@ -167,6 +167,17 @@ test("strictly decodes complete profiles without rebuilding supported variants",
     (noCompatibleVersion.opencode as Record<string, unknown>).compatible_versions = [];
     assert.throws(() => decodeSourceProfile(noCompatibleVersion), /expected at least one version/u);
 
+    for (const generatedAt of [
+      "2026-09-01",
+      "2026-09-01T12:00:00Z",
+      "2026-09-01T12:00:00.000+00:00",
+      "2026-02-30T12:00:00.000Z",
+    ]) {
+      const nonCanonical = structuredClone(profile) as unknown as Record<string, unknown>;
+      nonCanonical.generated_at = generatedAt;
+      assert.throws(() => decodeSourceProfile(nonCanonical), /expected canonical ISO timestamp/u);
+    }
+
     const inconsistent = {
       ...structuredClone(profile),
       content: {
@@ -198,6 +209,26 @@ test("profile construction rejects observed variants unsupported by the supplied
       assert.deepEqual(error.variants, ["location-switched"]);
       return true;
     });
+  } finally {
+    database.close();
+  }
+});
+
+test("profile construction rejects an empty explicit compatible-version allowlist", () => {
+  const database = indexedDatabase();
+  try {
+    assert.throws(() => createSourceProfile({
+      profileID: "fixture",
+      generatedAt: "2026-09-01T12:00:00.000Z",
+      generatorVersion: "0.1.0",
+      executable: "opencode",
+      opencodeVersion: "1.0.0",
+      compatibleVersions: [],
+      sourcePath: "/data/opencode.db",
+      schema: extractSqliteProfileSchema(database, ["session_message"]),
+      supportedMessageVariants: ["assistant"],
+      observedMessageVariants: ["assistant"],
+    }), /compatibleVersions must contain at least one version/u);
   } finally {
     database.close();
   }

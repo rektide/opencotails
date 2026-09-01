@@ -1,4 +1,5 @@
 import { deriveIndexCapabilities } from "./capabilities.ts";
+import { decodeSourceProfile } from "./codec.ts";
 import type { SourceProfile, SqliteProfileSchema } from "./types.ts";
 import { SOURCE_PROFILE_FORMAT } from "./types.ts";
 
@@ -33,7 +34,9 @@ export function createSourceProfile(input: CreateSourceProfileInput): SourceProf
   const supportedSet = new Set(supported);
   const unsupported = observed.filter((variant) => !supportedSet.has(variant));
   if (unsupported.length > 0) throw new UnsupportedObservedMessageVariantsError(unsupported);
-  return {
+  const compatibleVersions = sortedUnique(input.compatibleVersions ?? [input.opencodeVersion]);
+  if (compatibleVersions.length === 0) throw new Error("compatibleVersions must contain at least one version");
+  return decodeSourceProfile({
     format: SOURCE_PROFILE_FORMAT,
     profile_id: input.profileID,
     generated_at: input.generatedAt,
@@ -45,7 +48,7 @@ export function createSourceProfile(input: CreateSourceProfileInput): SourceProf
     opencode: {
       executable: input.executable,
       generated_with: input.opencodeVersion,
-      compatible_versions: sortedUnique(input.compatibleVersions ?? [input.opencodeVersion]),
+      compatible_versions: compatibleVersions,
     },
     source: { kind: "opencode-v2", path: input.sourcePath },
     schema: input.schema,
@@ -54,5 +57,5 @@ export function createSourceProfile(input: CreateSourceProfileInput): SourceProf
       observed_message_variants: observed,
     },
     capabilities: deriveIndexCapabilities(input.schema),
-  };
+  });
 }
