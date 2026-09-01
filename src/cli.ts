@@ -16,6 +16,7 @@ Commands:
   search <pattern> [pattern...]   Search opencode sessions for matching content
   history                         List sessions active within a time window
   get-session [pid]               Resolve the active session id for an opencode PID
+  profile                         Explicitly generate, show, validate, or refresh source profiles
 
 Run "cotail <command> --help" for command-specific options.
 `);
@@ -30,6 +31,8 @@ export async function main(): Promise<void> {
       return await (await import("./commands/history.ts")).run(rest);
     case "get-session":
       return await (await import("./commands/get-session.ts")).run(rest);
+    case "profile":
+      return await (await import("./commands/profile/index.ts")).run(rest);
     case "-h":
     case "--help":
     case "help":
