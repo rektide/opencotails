@@ -3,22 +3,21 @@ import {
   canonicalJson,
   deriveIndexCapabilities,
   extractObservedMessageVariants,
-  extractSqliteProfileSchema,
+  extractOpenCodeProfileSchema,
   type SourceProfile,
 } from "@opencoattails/query-kysely";
 import { runOpenCodeVersion } from "../opencode/version.ts";
 
-export interface ProfileValidationSelection {
-  readonly version: boolean;
-  readonly schema: boolean;
-  readonly indexes: boolean;
-  readonly content: boolean;
-  readonly plans: boolean;
+export const PROFILE_VALIDATION_CHECKS = ["version", "schema", "indexes", "content", "plans"] as const;
+export type ProfileValidationCheck = typeof PROFILE_VALIDATION_CHECKS[number];
+
+export function isProfileValidationCheck(value: string): value is ProfileValidationCheck {
+  return PROFILE_VALIDATION_CHECKS.some((check) => check === value);
 }
 
 export interface ValidateSourceProfileRequest {
   readonly profile: SourceProfile;
-  readonly selection: ProfileValidationSelection;
+  readonly checks: ReadonlySet<ProfileValidationCheck>;
   readonly executable?: string;
   readonly databasePath?: string;
 }
@@ -30,6 +29,12 @@ export interface ProfileValidationResult {
 }
 
 const same = (left: unknown, right: unknown): boolean => canonicalJson(left) === canonicalJson(right);
+const schemaFacts = (profile: SourceProfile["schema"]) => Object.fromEntries(
+  Object.entries(profile.tables).map(([name, table]) => [name, { columns: table.columns }]),
+);
+const indexFacts = (profile: SourceProfile["schema"]) => Object.fromEntries(
+  Object.entries(profile.tables).map(([name, table]) => [name, { indexes: table.indexes }]),
+);
 
 export async function validateSourceProfile(
   request: ValidateSourceProfileRequest,
@@ -37,7 +42,7 @@ export async function validateSourceProfile(
   const lines: string[] = [];
   let diagnostics = "";
   let valid = true;
-  if (request.selection.version) {
+  if (request.checks.has("version")) {
     const installed = await runOpenCodeVersion(request.executable ?? request.profile.opencode.executable);
     diagnostics += installed.diagnostics;
     const compatible = request.profile.opencode.compatible_versions.includes(installed.version);
@@ -45,32 +50,28 @@ export async function validateSourceProfile(
     valid &&= compatible;
   }
 
-  const needsSchema = request.selection.schema || request.selection.indexes;
-  const needsDatabase = needsSchema || request.selection.content;
+  const needsSchema = request.checks.has("schema") || request.checks.has("indexes");
+  const needsDatabase = needsSchema || request.checks.has("content");
   if (needsDatabase) {
     const database = new DatabaseSync(request.databasePath ?? request.profile.source.path, { readOnly: true });
     try {
       database.exec("PRAGMA query_only = ON");
-      let extracted: ReturnType<typeof extractSqliteProfileSchema> | undefined;
+      let extracted: ReturnType<typeof extractOpenCodeProfileSchema> | undefined;
       if (needsSchema) {
-        extracted = extractSqliteProfileSchema(database, Object.keys(request.profile.schema.tables));
+        extracted = extractOpenCodeProfileSchema(database);
       }
-      if (request.selection.schema) {
-        const matched = extracted !== undefined && same(extracted, request.profile.schema);
+      if (request.checks.has("schema")) {
+        const matched = extracted !== undefined && same(schemaFacts(extracted), schemaFacts(request.profile.schema));
         lines.push(`schema: ${matched ? "match" : "mismatch"}`);
         valid &&= matched;
       }
-      if (request.selection.indexes) {
-        const actualIndexes = Object.fromEntries(Object.entries(extracted!.tables).map(([name, table]) =>
-          [name, table.indexes]));
-        const expectedIndexes = Object.fromEntries(Object.entries(request.profile.schema.tables).map(([name, table]) =>
-          [name, table.indexes]));
-        const matched = same(actualIndexes, expectedIndexes)
+      if (request.checks.has("indexes")) {
+        const matched = same(indexFacts(extracted!), indexFacts(request.profile.schema))
           && same(deriveIndexCapabilities(extracted!), request.profile.capabilities);
         lines.push(`indexes: ${matched ? "match" : "mismatch"}`);
         valid &&= matched;
       }
-      if (request.selection.content) {
+      if (request.checks.has("content")) {
         const observed = extractObservedMessageVariants(database);
         const supported = new Set(request.profile.content.supported_message_variants);
         const matched = same(observed, request.profile.content.observed_message_variants)
@@ -83,11 +84,11 @@ export async function validateSourceProfile(
     }
   }
 
-  if (request.selection.plans) {
+  if (request.checks.has("plans")) {
     const certificates = Object.keys(request.profile.certificates ?? {});
     if (certificates.length === 0) lines.push("plans: no certificates recorded");
     else {
-      lines.push(`plans: not validated (${certificates.join(", ")})`);
+      lines.push(`plans: unsupported for recorded certificates (${certificates.join(", ")})`);
       valid = false;
     }
   }

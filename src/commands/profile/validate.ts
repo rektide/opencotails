@@ -1,5 +1,11 @@
 import { resolve } from "node:path";
-import { readSourceProfile, validateSourceProfile, type ProfileValidationSelection } from "../../profile/index.ts";
+import {
+  isProfileValidationCheck,
+  PROFILE_VALIDATION_CHECKS,
+  readSourceProfile,
+  validateSourceProfile,
+  type ProfileValidationCheck,
+} from "../../profile/index.ts";
 import { optionValue, ProfileUsageError } from "./options.ts";
 
 export function printValidateHelp(): void {
@@ -12,12 +18,14 @@ Checks:
   --schema    Re-extract and compare canonical SQLite schema facts
   --indexes   Re-extract indexes and re-derive capabilities
   --content   Scan and compare distinct Message variants
-  --plans     Validate recorded certificates (reports none when absent)
-  --all       Run all checks (also the default when no check is selected)
+  --plans     Confirm no plan certificates need validation; recorded certificates are unsupported
+  --all       Run every check explicitly
 
 Overrides:
   --opencode <path>  Executable used by --version
   --db <path>        Database used by schema, index, and content checks
+
+Index capabilities conservatively reject partial indexes because predicate implication is not implemented.
 `);
 }
 
@@ -25,7 +33,7 @@ export async function runValidate(argv: readonly string[]): Promise<void> {
   let profilePath: string | undefined;
   let executable: string | undefined;
   let databasePath: string | undefined;
-  const selected = new Set<keyof ProfileValidationSelection>();
+  const selected = new Set<ProfileValidationCheck>();
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index]!;
     if (argument === "-h" || argument === "--help") {
@@ -41,11 +49,11 @@ export async function runValidate(argv: readonly string[]): Promise<void> {
       continue;
     }
     if (argument === "--all") {
-      for (const check of ["version", "schema", "indexes", "content", "plans"] as const) selected.add(check);
+      for (const check of PROFILE_VALIDATION_CHECKS) selected.add(check);
       continue;
     }
-    const check = argument.replace(/^--/u, "") as keyof ProfileValidationSelection;
-    if (["version", "schema", "indexes", "content", "plans"].includes(check)) {
+    const check = argument.startsWith("--") ? argument.slice(2) : "";
+    if (isProfileValidationCheck(check)) {
       selected.add(check);
       continue;
     }
@@ -53,15 +61,12 @@ export async function runValidate(argv: readonly string[]): Promise<void> {
   }
   if (profilePath === undefined) throw new ProfileUsageError("--profile is required");
   if (selected.size === 0) {
-    for (const check of ["version", "schema", "indexes", "content", "plans"] as const) selected.add(check);
+    throw new ProfileUsageError("at least one validation selector is required (or use --all)");
   }
   const profile = await readSourceProfile(resolve(profilePath));
-  const selection = Object.fromEntries(
-    ["version", "schema", "indexes", "content", "plans"].map((check) => [check, selected.has(check as keyof ProfileValidationSelection)]),
-  ) as unknown as ProfileValidationSelection;
   const result = await validateSourceProfile({
     profile,
-    selection,
+    checks: selected,
     ...(executable === undefined ? {} : { executable }),
     ...(databasePath === undefined ? {} : { databasePath: resolve(databasePath) }),
   });
