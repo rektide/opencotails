@@ -7,7 +7,6 @@ import {
   searchDirectSessions,
   sessionDirectoryContains,
   sessionPredicate,
-  sessionUpdatedRange,
   witnessName,
   type DocumentField,
   type SessionPredicate,
@@ -47,7 +46,6 @@ const SEARCH_FIELDS: Record<PartType, readonly DocumentField[]> = {
 function selection(args: Args): SessionPredicate | undefined {
   const predicates: SessionPredicate[] = [];
   if (args.directory !== undefined) predicates.push(sessionDirectoryContains(args.directory));
-  if (args.sinceMs !== undefined) predicates.push(sessionUpdatedRange({ from: args.sinceMs }));
   return predicates.length === 0
     ? undefined
     : sessionPredicate((context) => context.eb.and(predicates.map((predicate) => predicate(context))));
@@ -71,6 +69,7 @@ async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<S
         : searchDirectSessions(query, {
           witnesses,
           sessionPredicate: selection(args),
+          ...(args.sinceMs === undefined ? {} : { messageCreatedRange: { from: args.sinceMs } }),
           evidence: !args.titleOnly && args.showSnippet,
           window: { sessions: { first: args.limit }, childrenPerSession: 1 },
         })),
@@ -199,7 +198,7 @@ Options:
   --title-only     Search session titles only
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
-  --since <dur>    Only sessions updated after cutoff (24h, 7d, 30m, or ISO date)
+  --since <dur>    Only Messages created at/after cutoff (24h, 7d, 30m, or ISO date)
   --directory <p>  Only sessions whose directory contains <p>
   -F, --fixed-strings   Treat patterns as literal strings, not regex
   -s, --case-sensitive  Match case sensitively (default: case-insensitive)

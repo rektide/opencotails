@@ -355,9 +355,10 @@ function acquireNodeOpenCodeSourceWithHooks(
     }),
   ).pipe(Effect.flatMap((resource) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
     const source = sourceKey(config.sourceID);
+    const world = (scope = {}) => logicalWorld(resource.physical, scope);
     const query = makeNodeLogicalQuery({
       native: resource.native,
-      context: { db: logicalWorld(resource.physical), profile: config.profile, source },
+      context: { db: world(), world, profile: config.profile, source },
       semaphore,
       hooks,
     });

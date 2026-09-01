@@ -4,6 +4,7 @@ import { Context, Effect, Stream } from "effect";
 import type { SourceKey } from "../domain/address.ts";
 import type { ReadProvenance } from "../domain/observation.ts";
 import type { CotailRelations } from "../relations/schema.ts";
+import type { LogicalWorldScope } from "../relations/world.ts";
 import type { TrustedSourceProfileFacts } from "../profile/types.ts";
 import { QueryCompileError, QueryExecutionError } from "./errors.ts";
 
@@ -11,6 +12,7 @@ export type AnyLogicalSelect = SelectQueryBuilder<any, any, any>;
 
 export interface QueryContext {
   readonly db: ReadonlyQueryCreator<CotailRelations>;
+  readonly world: (scope?: LogicalWorldScope) => ReadonlyQueryCreator<CotailRelations>;
   readonly profile: TrustedSourceProfileFacts;
   readonly source: SourceKey;
 }

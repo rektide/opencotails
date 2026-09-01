@@ -65,7 +65,7 @@ async function runSearch(
 async function compileSearch(path: string, options: Parameters<typeof searchDirectSessions>[1]) {
   return Effect.runPromise(Effect.scoped(
     acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
-      Effect.flatMap(({ query }) => query.compile(({ db, source }) => directSessionSearchQuery(db, source, options))),
+      Effect.flatMap(({ query }) => query.compile((context) => directSessionSearchQuery(context, options))),
     ),
   ));
 }
@@ -74,7 +74,7 @@ async function explainSearch(path: string, options: Parameters<typeof searchDire
   return Effect.runPromise(Effect.scoped(
     acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => query.openRead.pipe(Effect.flatMap((read) =>
-        read.explain(({ db, source }) => directSessionSearchQuery(db, source, options))))),
+        read.explain((context) => directSessionSearchQuery(context, options))))),
     ),
   ));
 }
@@ -177,6 +177,52 @@ test("applies a contextual Session predicate before witness qualification", asyn
       window: { sessions: { first: 3 }, childrenPerSession: 1 },
     });
     assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_b"]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("Message-created ranges bound activity and the Message witness universe", async () => {
+  const fixture = await searchFixture();
+  try {
+    const validated: string[] = [];
+    const result = await runSearch(fixture.path, {
+      witnesses: [alpha],
+      messageCreatedRange: { from: 2 },
+      evidence: true,
+      window: { sessions: { first: 3 }, childrenPerSession: 3 },
+    }, (messageID) => validated.push(messageID));
+
+    assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_b"]);
+    assert.deepEqual(result[0]!.children.map((child) => child.document.value.excerpt), ["alpha one", "alpha two"]);
+    assert.equal(validated.some((messageID) => ["msg_a0", "msg_b0", "msg_c0"].includes(messageID)), false);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("Message-created ranges retain title matches only for Sessions with activity in range", async () => {
+  const fixture = await searchFixture();
+  try {
+    const title = (value: string) => documentWitness(witnessName(`title-${value}`), (eb) => eb.and([
+      eb("field", "=", "session.title"),
+      literal(eb.ref("text"), value),
+    ]));
+    const [active, inactive] = await Promise.all([
+      runSearch(fixture.path, {
+        witnesses: [title("B")],
+        messageCreatedRange: { from: 3 },
+        window: { sessions: { first: 3 }, childrenPerSession: 1 },
+      }),
+      runSearch(fixture.path, {
+        witnesses: [title("C")],
+        messageCreatedRange: { from: 3 },
+        window: { sessions: { first: 3 }, childrenPerSession: 1 },
+      }),
+    ]);
+
+    assert.deepEqual(active.map((group) => group.session.value.sessionID), ["ses_b"]);
+    assert.deepEqual(inactive, []);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -309,6 +355,33 @@ test("indexed plan drives post-window document and hydration work from selected 
     // may scan Messages before the selected Session page is established.
     assert.equal(details.some((detail) => /CORRELATED SCALAR SUBQUERY/u.test(detail)), true);
     assert.equal(details.slice(0, matchingOuter).some((detail) => /SCAN session_message/u.test(detail)), true);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("indexed Message-created search constrains session_message before payload validation", async () => {
+  const fixture = await searchFixture();
+  try {
+    const request = {
+      witnesses: [alpha],
+      messageCreatedRange: { from: 2 },
+      window: { sessions: { first: 1 }, childrenPerSession: 1 },
+    } as const;
+    const [compiled, plan] = await Promise.all([
+      compileSearch(fixture.path, request),
+      explainSearch(fixture.path, request),
+    ]);
+
+    const sourceRangeAt = compiled.sql.indexOf('from "session_message" where "time_created" >= ?');
+    const validationAt = compiled.sql.indexOf("cotail_validate_message(");
+    assert.ok(sourceRangeAt >= 0 && validationAt > sourceRangeAt,
+      `Message range does not precede validation:\n${compiled.sql}`);
+    assert.equal(plan.some(({ detail }) => /SCAN session_message/u.test(detail)), false,
+      plan.map(({ detail }) => detail).join("\n"));
+    assert.equal(plan.some(({ detail }) =>
+      /SEARCH session_message .*time_created/u.test(detail)), true,
+    plan.map(({ detail }) => detail).join("\n"));
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

@@ -14,10 +14,29 @@ import type {
   UserMessageRelation,
 } from "./schema.ts";
 
+export interface LogicalWorldScope {
+  readonly messageCreatedRange?: {
+    readonly from?: number;
+    readonly to?: number;
+  };
+}
+
 export function logicalWorld(
   physical: Kysely<PhysicalOpenCodeV2>,
+  scope: LogicalWorldScope = {},
 ): ReadonlyQueryCreator<CotailRelations> {
+  const messageCreatedRange = scope.messageCreatedRange;
   const seeded = physical
+    .with("cotail_scoped_message", (db) => {
+      let messages = db.selectFrom("session_message").selectAll();
+      if (messageCreatedRange?.from !== undefined) {
+        messages = messages.where("time_created", ">=", messageCreatedRange.from);
+      }
+      if (messageCreatedRange?.to !== undefined) {
+        messages = messages.where("time_created", "<", messageCreatedRange.to);
+      }
+      return messages;
+    })
     .with("cotail_session", (db) => db.selectFrom("session_v2").select([
       "id as sessionID", "project_id as projectID", "workspace_id as workspaceID",
       "parent_id as parentID", "fork_session_id as forkSessionID", "fork_boundary as forkBoundary",
@@ -30,15 +49,15 @@ export function logicalWorld(
       "agent", "model", "time_created as createdAt", "time_updated as updatedAt",
       "time_compacting as compactingAt", "time_archived as archivedAt", "time_suspended as suspendedAt",
     ]))
-    .with("cotail_message", (db) => db.selectFrom("session_message").select([
+    .with("cotail_message", (db) => db.selectFrom("cotail_scoped_message").select([
       "session_id as sessionID", "id as messageID", "type as messageType", "seq as messageSeq",
       "time_created as createdAt", "time_updated as updatedAt", "data as sourceJSON",
     ]))
     .with("cotail_validated_message", () => sql<PhysicalOpenCodeV2["session_message"]>`(
       select id, session_id, type, seq, time_created, time_updated,
              cotail_validate_message(id, type, data) as data
-      from session_message
-    )`)
+       from cotail_scoped_message
+     )`)
     .with("cotail_user_message", () => sql<UserMessageRelation>`(
       select session_id as sessionID, id as messageID, seq as messageSeq,
              json_extract(data, '$.text') as text,

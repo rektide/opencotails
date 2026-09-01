@@ -40,6 +40,13 @@ test("content terms use independent witnesses and first-pattern evidence", () =>
   assert.equal(result.stdout, '{"id":"ses_newest_abcdefghijkl","slug":"newest","title":"Alpha Beta","directory":"/work/alpha","created":"1970-01-01 00:00:01","updated":"1970-01-01 00:00:05","snippet":"alpha beta first snippet"}\n{"id":"ses_split_abcdefghijkl","slug":"split","title":"Split witnesses","directory":"/work/alpha","created":"1970-01-01 00:00:02","updated":"1970-01-01 00:00:04","snippet":"alpha only"}\n{"id":"ses_other_abcdefghijkl","slug":"other","title":"Other","directory":"/work/beta","created":"1970-01-01 00:00:03","updated":"1970-01-01 00:00:03","snippet":"alpha beta other"}\n');
 });
 
+test("search --since scopes matching content by Message creation time", () => {
+  const result = cli(["search", "alpha", "--since", "1970-01-01T00:00:03Z", "--json", "--db", database]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout, '{"id":"ses_newest_abcdefghijkl","slug":"newest","title":"Alpha Beta","directory":"/work/alpha","created":"1970-01-01 00:00:01","updated":"1970-01-01 00:00:05","snippet":"alpha beta first snippet"}\n{"id":"ses_other_abcdefghijkl","slug":"other","title":"Other","directory":"/work/beta","created":"1970-01-01 00:00:03","updated":"1970-01-01 00:00:03","snippet":"alpha beta other"}\n');
+});
+
 test("content no-snippet, limit zero, fixed strings, and human output remain exact", () => {
   assert.equal(cli(["search", "alpha", "--no-snippet", "--json", "--db", database]).stdout,
     '{"id":"ses_newest_abcdefghijkl","slug":"newest","title":"Alpha Beta","directory":"/work/alpha","created":"1970-01-01 00:00:01","updated":"1970-01-01 00:00:05"}\n{"id":"ses_split_abcdefghijkl","slug":"split","title":"Split witnesses","directory":"/work/alpha","created":"1970-01-01 00:00:02","updated":"1970-01-01 00:00:04"}\n{"id":"ses_other_abcdefghijkl","slug":"other","title":"Other","directory":"/work/beta","created":"1970-01-01 00:00:03","updated":"1970-01-01 00:00:03"}\n');

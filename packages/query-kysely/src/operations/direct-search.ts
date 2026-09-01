@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { sql } from "kysely";
-import type { ReadonlyQueryCreator } from "kysely/readonly";
 import type { DocumentWitness, WitnessName } from "../direct/witness.ts";
 import type { SessionPredicate } from "../direct/session.ts";
 import { sessionContext } from "./session-context.ts";
@@ -24,8 +23,8 @@ import type {
 } from "../domain/results.ts";
 import { sessionID } from "../domain/identifier.ts";
 import type { ReadProvenance } from "../domain/observation.ts";
-import type { LogicalQueryShape, QueryError } from "../query/logical-query.ts";
-import type { CotailRelations, DocumentRelation } from "../relations/schema.ts";
+import type { LogicalQueryShape, QueryContext, QueryError } from "../query/logical-query.ts";
+import type { DocumentRelation } from "../relations/schema.ts";
 
 export interface DirectSessionSearch {
   readonly witnesses: readonly DocumentWitness[];
@@ -33,6 +32,15 @@ export interface DirectSessionSearch {
   readonly evidence?: boolean;
   readonly excerptLength?: number;
   readonly sessionPredicate?: SessionPredicate;
+  /**
+   * Bounds Message activity and every Message-derived witness before payload
+   * validation. Session-owned witnesses remain available only for Sessions
+   * that have at least one Message in the range.
+   */
+  readonly messageCreatedRange?: {
+    readonly from?: number;
+    readonly to?: number;
+  };
 }
 
 export type DirectSearchError = QueryError | RowDecodeError;
@@ -76,6 +84,20 @@ function validate(request: DirectSessionSearch): void {
   positive("childrenPerSession", request.window.childrenPerSession);
   if (request.window.globalHitLimit !== undefined) positive("globalHitLimit", request.window.globalHitLimit);
   if (request.excerptLength !== undefined) positive("excerptLength", request.excerptLength);
+  const messageRange = request.messageCreatedRange;
+  if (messageRange !== undefined) {
+    if (messageRange.from === undefined && messageRange.to === undefined) {
+      throw new TypeError("Message-created range requires a bound");
+    }
+    for (const [name, value] of [["from", messageRange.from], ["to", messageRange.to]] as const) {
+      if (value !== undefined && !Number.isSafeInteger(value)) {
+        throw new TypeError(`Message-created range ${name} must be a safe integer`);
+      }
+    }
+    if (messageRange.from !== undefined && messageRange.to !== undefined && messageRange.from >= messageRange.to) {
+      throw new RangeError("Message-created range must increase");
+    }
+  }
   const cursor = request.window.sessions.after;
   if (cursor !== undefined && (!Number.isSafeInteger(cursor.updatedAt) || cursor.updatedAt < 0
     || cursor.sessionID.trim().length === 0)) {
@@ -172,11 +194,14 @@ function decodeRows(
  * remains the intentionally unbounded-by-page residual.
  */
 export function directSessionSearchQuery(
-  db: ReadonlyQueryCreator<CotailRelations>,
-  source: SourceKey,
+  context: QueryContext,
   request: DirectSessionSearch,
 ) {
   validate(request);
+  const { source } = context;
+  const db = request.messageCreatedRange === undefined
+    ? context.db
+    : context.world({ messageCreatedRange: request.messageCreatedRange });
   const staged = db
     .with("candidate_sessions", (qb) => {
       let candidates = qb.selectFrom("cotail_session")
@@ -192,6 +217,12 @@ export function directSessionSearchQuery(
         ]);
       if (request.sessionPredicate !== undefined) {
         candidates = candidates.where((eb) => request.sessionPredicate!(sessionContext(eb)));
+      }
+      if (request.messageCreatedRange !== undefined) {
+        candidates = candidates.where((eb) => eb.exists(eb
+          .selectFrom("cotail_message")
+          .select("cotail_message.messageID")
+          .whereRef("cotail_message.sessionID", "=", "cotail_session.sessionID")));
       }
       const cursor = request.window.sessions.after;
       if (cursor !== undefined) {
@@ -342,8 +373,8 @@ export function searchDirectSessions(
   request: DirectSessionSearch,
 ): Effect.Effect<readonly GroupedSession<DirectEvidence>[], DirectSearchError> {
   validate(request);
-  return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all(({ db, source }) =>
-    directSessionSearchQuery(db, source, request)).pipe(
+  return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all((context) =>
+    directSessionSearchQuery(context, request)).pipe(
     Effect.flatMap((rows) => Effect.try({
       try: () => decodeRows(rows as unknown as readonly SearchRow[], request, read.provenance),
       catch: (cause) => cause instanceof RowDecodeError
