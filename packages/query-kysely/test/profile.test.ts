@@ -93,6 +93,27 @@ test("hashes structured extracted facts independent of CREATE statement whitespa
   }
 });
 
+test("extracts columns and indexes independently when explicit validation selects one fact family", () => {
+  const database = indexedDatabase();
+  try {
+    const columns = extractSqliteProfileSchema(database, ["session_message"], {
+      columns: true,
+      indexes: false,
+    });
+    assert.equal(columns.tables.session_message!.columns.length, 5);
+    assert.deepEqual(columns.tables.session_message!.indexes, []);
+
+    const indexes = extractSqliteProfileSchema(database, ["session_message"], {
+      columns: false,
+      indexes: true,
+    });
+    assert.deepEqual(indexes.tables.session_message!.columns, []);
+    assert.equal(indexes.tables.session_message!.indexes.length, 5);
+  } finally {
+    database.close();
+  }
+});
+
 test("derives capabilities using leftmost keys, collation, direction, expressions, and partial-index safety", () => {
   const database = indexedDatabase();
   try {

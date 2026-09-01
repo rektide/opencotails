@@ -43,6 +43,11 @@ export class SqliteProfileExtractionError extends Error {
   }
 }
 
+export interface SqliteProfileExtractionSelection {
+  readonly columns?: boolean;
+  readonly indexes?: boolean;
+}
+
 export const OPENCODE_PROFILE_REQUIRED_TABLES = Object.freeze([
   "kv",
   "session_message",
@@ -217,36 +222,54 @@ function extractIndex(database: DatabaseSync, row: IndexListRow): SqliteIndexFac
   };
 }
 
-function extractTable(database: DatabaseSync, name: string): SqliteTableFact {
-  const columns = database.prepare(`
-    SELECT cid, name, type, "notnull" AS not_null, dflt_value AS default_value,
-           pk AS primary_key, hidden
-    FROM pragma_table_xinfo(?)
-    ORDER BY cid
-  `).all(name) as unknown as readonly TableXinfoRow[];
-  if (columns.length === 0) throw new SqliteProfileExtractionError(`SQLite table not found: ${name}`);
-  const columnFacts: SqliteColumnFact[] = columns.map((column) => ({
-    cid: number(column.cid, "table_xinfo.cid"),
-    name: string(column.name, "table_xinfo.name"),
-    type: string(column.type, "table_xinfo.type").toUpperCase(),
-    not_null: number(column.not_null, "table_xinfo.notnull") !== 0,
-    default_value: column.default_value === null ? null : canonicalSqlFragment(string(column.default_value, "table_xinfo.dflt_value")),
-    primary_key: number(column.primary_key, "table_xinfo.pk"),
-    hidden: number(column.hidden, "table_xinfo.hidden"),
-  }));
-  const indexRows = database.prepare(`
-    SELECT list.name, list."unique" AS unique_value, list.origin, list.partial, schema.sql AS definition
-    FROM pragma_index_list(?) AS list
-    LEFT JOIN sqlite_schema AS schema ON schema.type = 'index' AND schema.name = list.name
-    ORDER BY list.name
-  `).all(name) as unknown as readonly IndexListRow[];
-  return { columns: columnFacts, indexes: indexRows.map((row) => extractIndex(database, row)) };
+function extractTable(
+  database: DatabaseSync,
+  name: string,
+  selection: Required<SqliteProfileExtractionSelection>,
+): SqliteTableFact {
+  let columnFacts: readonly SqliteColumnFact[] = [];
+  if (selection.columns) {
+    const columns = database.prepare(`
+      SELECT cid, name, type, "notnull" AS not_null, dflt_value AS default_value,
+             pk AS primary_key, hidden
+      FROM pragma_table_xinfo(?)
+      ORDER BY cid
+    `).all(name) as unknown as readonly TableXinfoRow[];
+    if (columns.length === 0) throw new SqliteProfileExtractionError(`SQLite table not found: ${name}`);
+    columnFacts = columns.map((column) => ({
+      cid: number(column.cid, "table_xinfo.cid"),
+      name: string(column.name, "table_xinfo.name"),
+      type: string(column.type, "table_xinfo.type").toUpperCase(),
+      not_null: number(column.not_null, "table_xinfo.notnull") !== 0,
+      default_value: column.default_value === null ? null : canonicalSqlFragment(string(column.default_value, "table_xinfo.dflt_value")),
+      primary_key: number(column.primary_key, "table_xinfo.pk"),
+      hidden: number(column.hidden, "table_xinfo.hidden"),
+    }));
+  } else if (database.prepare("SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?").get(name) === undefined) {
+    throw new SqliteProfileExtractionError(`SQLite table not found: ${name}`);
+  }
+  let indexes: readonly SqliteIndexFact[] = [];
+  if (selection.indexes) {
+    const indexRows = database.prepare(`
+      SELECT list.name, list."unique" AS unique_value, list.origin, list.partial, schema.sql AS definition
+      FROM pragma_index_list(?) AS list
+      LEFT JOIN sqlite_schema AS schema ON schema.type = 'index' AND schema.name = list.name
+      ORDER BY list.name
+    `).all(name) as unknown as readonly IndexListRow[];
+    indexes = indexRows.map((row) => extractIndex(database, row));
+  }
+  return { columns: columnFacts, indexes };
 }
 
 export function extractSqliteProfileSchema(
   database: DatabaseSync,
   tableNames?: readonly string[],
+  input: SqliteProfileExtractionSelection = {},
 ): SqliteProfileSchema {
+  const selection = { columns: input.columns ?? true, indexes: input.indexes ?? true };
+  if (!selection.columns && !selection.indexes) {
+    throw new SqliteProfileExtractionError("profile extraction must select columns or indexes");
+  }
   const names = tableNames === undefined
     ? (database.prepare(`
       SELECT name FROM sqlite_schema
@@ -255,11 +278,14 @@ export function extractSqliteProfileSchema(
     `).all() as unknown as readonly { readonly name: string }[]).map(({ name }) => name)
     : [...new Set(tableNames)].sort();
   const tables: Record<string, SqliteTableFact> = {};
-  for (const name of names) tables[name] = extractTable(database, name);
+  for (const name of names) tables[name] = extractTable(database, name, selection);
   return withSqliteProfileHash(tables);
 }
 
-export function extractOpenCodeProfileSchema(database: DatabaseSync): SqliteProfileSchema {
+export function extractOpenCodeProfileSchema(
+  database: DatabaseSync,
+  selection?: SqliteProfileExtractionSelection,
+): SqliteProfileSchema {
   const present = new Set(
     (database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all() as unknown as
       readonly { readonly name: unknown }[]).map(({ name }) => string(name, "sqlite_schema.name")),
@@ -272,7 +298,7 @@ export function extractOpenCodeProfileSchema(database: DatabaseSync): SqliteProf
     ...OPENCODE_PROFILE_REQUIRED_TABLES,
     ...OPENCODE_PROFILE_OPTIONAL_TABLES.filter((name) => present.has(name)),
   ];
-  return extractSqliteProfileSchema(database, selected);
+  return extractSqliteProfileSchema(database, selected, selection);
 }
 
 export function extractObservedMessageVariants(database: DatabaseSync): readonly string[] {

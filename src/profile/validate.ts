@@ -58,7 +58,10 @@ export async function validateSourceProfile(
       database.exec("PRAGMA query_only = ON");
       let extracted: ReturnType<typeof extractOpenCodeProfileSchema> | undefined;
       if (needsSchema) {
-        extracted = extractOpenCodeProfileSchema(database);
+        extracted = extractOpenCodeProfileSchema(database, {
+          columns: request.checks.has("schema"),
+          indexes: request.checks.has("indexes"),
+        });
       }
       if (request.checks.has("schema")) {
         const matched = extracted !== undefined && same(schemaFacts(extracted), schemaFacts(request.profile.schema));
