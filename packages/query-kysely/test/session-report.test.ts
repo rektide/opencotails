@@ -10,7 +10,7 @@ import {
   sessionReportQuery,
 } from "../src/operations/session-report.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 async function reportFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-session-report-"));
@@ -54,7 +54,7 @@ test("maps every canonical Session report facet into a checked observation", asy
   const fixture = await reportFixture();
   try {
     const { result, row } = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.openRead),
         Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
           .where("cotail_session.sessionID", "=", "ses_report")).pipe(
@@ -130,7 +130,7 @@ test("preserves null optional fields and zero-valued counters", async () => {
   const fixture = await reportFixture();
   try {
     const report = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.openRead),
         Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
           .where("cotail_session.sessionID", "=", "ses_null")).pipe(
@@ -166,7 +166,7 @@ test("keeps the canonical projection unambiguous when operations add joins", asy
   const fixture = await reportFixture();
   try {
     const rows = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.openRead),
         Effect.flatMap((read) => read.all(({ db }) => sessionReportQuery(db)
           .leftJoin("cotail_message", "cotail_message.sessionID", "cotail_session.sessionID")
@@ -186,7 +186,7 @@ test("rejects malformed Session report rows at the decoder seam", async () => {
   const fixture = await reportFixture();
   try {
     const { row, source, read } = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.openRead),
         Effect.flatMap((scope) => scope.all(({ db }) => sessionReportQuery(db)
           .where("cotail_session.sessionID", "=", "ses_report")).pipe(

@@ -10,7 +10,7 @@ import { sessionID } from "../src/domain/identifier.ts";
 import { readSessionHistory, sessionHistoryQuery } from "../src/operations/history.ts";
 import { getSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function historyFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-history-"));
@@ -45,7 +45,7 @@ async function historyFixture(): Promise<{ readonly directory: string; readonly 
 
 async function history(path: string, request: Parameters<typeof readSessionHistory>[1]) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => readSessionHistory(query, request)),
     ),
   ));
@@ -53,7 +53,7 @@ async function history(path: string, request: Parameters<typeof readSessionHisto
 
 async function withQuery<A>(path: string, run: (query: Parameters<typeof getSession>[0]) => Effect.Effect<A, unknown>) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => run(query)),
     ),
   ));
@@ -138,7 +138,7 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
       limit: 2,
     } as const;
     const { compiled, plan } = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => Effect.all({
           compiled: query.compile(({ db }) => sessionHistoryQuery(db, request)),
           plan: Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.explain(({ db }) =>
@@ -230,6 +230,7 @@ test("acquisition and history skip payload validation while content evaluates it
       acquireNodeOpenCodeSource({
         path,
         sourceID: "fixture",
+        profile: trustedSourceProfileFacts,
         onPayloadValidation: () => { validations++; },
       }).pipe(
         Effect.flatMap(({ query }) => readSessionHistory(query, { since: 0 })
@@ -242,6 +243,7 @@ test("acquisition and history skip payload validation while content evaluates it
       acquireNodeOpenCodeSource({
         path,
         sourceID: "fixture",
+        profile: trustedSourceProfileFacts,
         onPayloadValidation: () => { validations++; },
       }).pipe(
         Effect.flatMap(({ query }) => all(query, ({ db }) => db.selectFrom("cotail_document").select("documentKey"))),

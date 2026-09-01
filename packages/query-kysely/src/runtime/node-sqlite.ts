@@ -22,9 +22,8 @@ import {
 } from "../query/errors.ts";
 import { logicalWorld } from "../relations/world.ts";
 import type { PhysicalOpenCodeV2 } from "../source/contracts.ts";
-import type { SourceCapabilities } from "../source/capabilities.ts";
-import type { SourceValidationError } from "../source/errors.ts";
-import { inspectOpenCodeV2Source, validateStoredMessagePayload } from "../source/validation.ts";
+import type { TrustedSourceProfileFacts } from "../profile/types.ts";
+import { validateStoredMessagePayload } from "../source/validation.ts";
 
 export class SourceOpenError extends Schema.TaggedErrorClass<SourceOpenError>()(
   "SourceOpenError",
@@ -34,13 +33,15 @@ export class SourceOpenError extends Schema.TaggedErrorClass<SourceOpenError>()(
 export interface NodeOpenCodeSourceConfig {
   readonly path: string;
   readonly sourceID: string;
+  readonly profile: TrustedSourceProfileFacts;
   readonly busyTimeoutMs?: number;
   readonly onPayloadValidation?: (messageID: string, messageType: string) => void;
 }
 
 export interface NodeOpenCodeSource {
   readonly query: LogicalQueryShape;
-  readonly capabilities: SourceCapabilities;
+  readonly profile: TrustedSourceProfileFacts;
+  readonly capabilities: TrustedSourceProfileFacts["capabilities"];
   readonly source: SourceKey;
   readonly closed: boolean;
 }
@@ -109,7 +110,6 @@ interface AcquiredNodeSource {
 
 export type NodeSqliteTestAction =
   | "begin"
-  | "pin"
   | "rollback"
   | "prepare"
   | "step"
@@ -231,14 +231,6 @@ function makeNodeLogicalQuery(input: {
         }
       }),
     );
-    yield* Effect.try({
-      try: () => {
-        hooks?.onAction("pin");
-        native.prepare("SELECT rootpage FROM sqlite_schema ORDER BY name LIMIT 1").get();
-      },
-      catch: (cause) => executionError(context.source, "pin", cause),
-    });
-
     const provenance = readProvenance(ReadScopeID.make(randomUUID()), Date.now());
     const acquireSlot = Effect.suspend(() => {
       if (state === "closed") return Effect.die(new ReadScopeClosed(context.source));
@@ -339,7 +331,7 @@ function makeNodeLogicalQuery(input: {
 
     const read: LogicalRead = Object.freeze({
       source: context.source,
-      capabilities: context.capabilities,
+      profile: context.profile,
       provenance,
       all,
       stream,
@@ -354,38 +346,35 @@ function makeNodeLogicalQuery(input: {
 function acquireNodeOpenCodeSourceWithHooks(
   config: NodeOpenCodeSourceConfig,
   hooks?: NodeSqliteTestHooks,
-): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
+): Effect.Effect<NodeOpenCodeSource, SourceOpenError, import("effect").Scope.Scope> {
   return Effect.acquireRelease(
     acquire(config),
     ({ adapter }) => Effect.sync(() => {
       adapter.close();
       hooks?.onAction("close");
     }),
-  ).pipe(
-    Effect.flatMap((resource) => inspectOpenCodeV2Source(resource.native).pipe(
-      Effect.flatMap((capabilities) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
-        const source = sourceKey(config.sourceID);
-        const query = makeNodeLogicalQuery({
-          native: resource.native,
-          context: { db: logicalWorld(resource.physical), capabilities, source },
-          semaphore,
-          hooks,
-        });
-        const exposed: NodeOpenCodeSource = {
-          query,
-          capabilities,
-          source,
-          get closed() { return resource.adapter.closed; },
-        };
-        return Object.freeze(exposed);
-      }))),
-    )),
-  );
+  ).pipe(Effect.flatMap((resource) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
+    const source = sourceKey(config.sourceID);
+    const query = makeNodeLogicalQuery({
+      native: resource.native,
+      context: { db: logicalWorld(resource.physical), profile: config.profile, source },
+      semaphore,
+      hooks,
+    });
+    const exposed: NodeOpenCodeSource = {
+      query,
+      profile: config.profile,
+      capabilities: config.profile.capabilities,
+      source,
+      get closed() { return resource.adapter.closed; },
+    };
+    return Object.freeze(exposed);
+  }))));
 }
 
 export function acquireNodeOpenCodeSource(
   config: NodeOpenCodeSourceConfig,
-): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
+): Effect.Effect<NodeOpenCodeSource, SourceOpenError, import("effect").Scope.Scope> {
   return acquireNodeOpenCodeSourceWithHooks(config);
 }
 
@@ -393,6 +382,6 @@ export function acquireNodeOpenCodeSource(
 export function acquireNodeOpenCodeSourceForTest(
   config: NodeOpenCodeSourceConfig,
   onAction: (action: NodeSqliteTestAction) => void,
-): Effect.Effect<NodeOpenCodeSource, SourceOpenError | SourceValidationError, import("effect").Scope.Scope> {
+): Effect.Effect<NodeOpenCodeSource, SourceOpenError, import("effect").Scope.Scope> {
   return acquireNodeOpenCodeSourceWithHooks(config, { onAction });
 }

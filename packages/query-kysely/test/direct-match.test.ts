@@ -8,7 +8,7 @@ import { all } from "../src/query/logical-query.ts";
 import { sql } from "kysely";
 import { literal, regex } from "../src/direct/match.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 async function sourceFile(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-direct-"));
@@ -27,7 +27,7 @@ test("direct literal and regex values remain SQL parameters", async () => {
   const fixture = await sourceFile();
   try {
     const compiled = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.compile(({ db }) => db.selectFrom("cotail_document")
           .select("documentKey")
           .where((eb) => eb.and([
@@ -52,7 +52,7 @@ test("case-insensitive regex preserves JavaScript character classes and Unicode 
   const fixture = await sourceFile();
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => all(query, ({ db }) => db.selectNoFrom((eb) => [
           sql<number>`${regex(eb.val("A"), "\\D", { flags: "i" })}`.as("nonDigit"),
           sql<number>`${regex(eb.val("A"), "\\S", { flags: "i" })}`.as("nonSpace"),

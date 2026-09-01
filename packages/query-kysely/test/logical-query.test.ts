@@ -6,7 +6,7 @@ import test from "node:test";
 import { Effect } from "effect";
 import { all } from "../src/query/logical-query.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function queryFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-query-"));
@@ -43,7 +43,7 @@ test("queries Sessions and Messages without filling sequence gaps or reading com
   const fixture = await queryFixture();
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => Effect.all({
           sessions: all(query, ({ db }) => db.selectFrom("cotail_session")
             .select(["sessionID", "title", "updatedAt"])

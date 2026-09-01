@@ -11,7 +11,7 @@ import {
   logicalKyselyQueryKey,
   nodeLogicalKyselyQueryFactory,
 } from "../src/runtime/registry.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 test("registers the canonical scoped logical world", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cotail-registry-"));
@@ -38,7 +38,7 @@ test("registers the canonical scoped logical world", async () => {
           ids: registry.byCapability(logicalKyselyCapability).map((entry) => entry.key.id),
         };
       }).pipe(Effect.provide(queryRegistryLayer([
-        nodeLogicalKyselyQueryFactory({ path, sourceID: "registry" }),
+        nodeLogicalKyselyQueryFactory({ path, sourceID: "registry", profile: trustedSourceProfileFacts }),
       ]))),
     );
     assert.deepEqual(result.rows.map((row) => ({ ...row })), [{ sessionID: "ses_registry" }]);

@@ -13,7 +13,7 @@ import {
   SessionNotFoundError,
 } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 async function resolveFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-resolve-"));
@@ -37,7 +37,7 @@ async function resolveFixture(): Promise<{ readonly directory: string; readonly 
 
 async function withQuery<A>(path: string, run: (query: Parameters<typeof getSession>[0]) => Effect.Effect<A, unknown>) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => run(query)),
     ),
   ));

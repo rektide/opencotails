@@ -17,7 +17,7 @@ import type { SessionReport } from "../src/domain/session-report.ts";
 import { captureSessionReport } from "../src/operations/capture.ts";
 import { SessionNotFoundError } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 interface CaptureFixture {
   readonly directory: string;
@@ -66,7 +66,7 @@ async function captureFixture(updatedAt: number): Promise<CaptureFixture> {
 
 function withQuery<A>(path: string, run: (query: Parameters<typeof captureSessionReport>[0]) => Effect.Effect<A, unknown>) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => run(query)),
     ),
   ));

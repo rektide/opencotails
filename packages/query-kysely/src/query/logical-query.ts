@@ -4,14 +4,14 @@ import { Context, Effect, Stream } from "effect";
 import type { SourceKey } from "../domain/address.ts";
 import type { ReadProvenance } from "../domain/observation.ts";
 import type { CotailRelations } from "../relations/schema.ts";
-import type { SourceCapabilities } from "../source/capabilities.ts";
+import type { TrustedSourceProfileFacts } from "../profile/types.ts";
 import { QueryCompileError, QueryExecutionError } from "./errors.ts";
 
 export type AnyLogicalSelect = SelectQueryBuilder<any, any, any>;
 
 export interface QueryContext {
   readonly db: ReadonlyQueryCreator<CotailRelations>;
-  readonly capabilities: SourceCapabilities;
+  readonly profile: TrustedSourceProfileFacts;
   readonly source: SourceKey;
 }
 
@@ -32,7 +32,7 @@ export type QueryError = QueryCompileError | QueryExecutionError;
 
 export interface LogicalRead {
   readonly source: SourceKey;
-  readonly capabilities: SourceCapabilities;
+  readonly profile: TrustedSourceProfileFacts;
   readonly provenance: ReadProvenance;
   readonly all: <const Q extends AnyLogicalSelect>(
     build: (context: QueryContext) => Q,

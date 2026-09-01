@@ -10,7 +10,7 @@ import { sessionDirectoryExact } from "../src/direct/session.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function searchFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-search-"));
@@ -49,7 +49,7 @@ async function runSearch(
   options: Parameters<typeof searchDirectSessions>[1],
 ) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => searchDirectSessions(query, options)),
     ),
   ));

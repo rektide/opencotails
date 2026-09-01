@@ -8,7 +8,7 @@ import { literal } from "../src/direct/match.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
 
 async function witnessFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-witness-"));
@@ -45,7 +45,7 @@ test("named witness uses the explicit owner expression under a Session alias", a
   const fixture = await witnessFixture();
   try {
     const compiled = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => query.compile(({ db }) => db.selectFrom("cotail_session as owner")
           .select("owner.sessionID")
           .where((eb) => alpha.forSession({ eb, sessionID: eb.ref("owner.sessionID") })))),
@@ -61,7 +61,7 @@ test("multiple witnesses are independent while one witness can require the same 
   const fixture = await witnessFixture();
   try {
     const result = await Effect.runPromise(Effect.scoped(
-      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture" }).pipe(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
         Effect.flatMap(({ query }) => Effect.all({
           independent: searchDirectSessions(query, {
             witnesses: [alpha, beta], evidence: false,

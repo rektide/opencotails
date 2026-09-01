@@ -126,3 +126,8 @@ export interface SourceProfile {
   readonly capabilities: Readonly<Record<string, IndexCapability>>;
   readonly certificates?: Readonly<Record<string, SourceProfilePlanCertificate>>;
 }
+
+export interface TrustedSourceProfileFacts {
+  readonly capabilities: SourceProfile["capabilities"];
+  readonly supportedMessageVariants: SourceProfile["content"]["supported_message_variants"];
+}

@@ -14,7 +14,7 @@ import {
 import type { SessionPredicate } from "../src/direct/session.ts";
 import { findLatestSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
 
 async function predicateFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-predicate-"));
@@ -36,7 +36,7 @@ async function predicateFixture(): Promise<{ readonly directory: string; readonl
 
 async function select(path: string, predicate: SessionPredicate) {
   return Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ path, sourceID: "fixture" }).pipe(
+    acquireNodeOpenCodeSource({ path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
       Effect.flatMap(({ query }) => findLatestSession(query, predicate)),
     ),
   ));
