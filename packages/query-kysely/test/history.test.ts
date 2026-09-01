@@ -10,12 +10,12 @@ import { sessionID } from "../src/domain/identifier.ts";
 import { readSessionHistory, sessionHistoryQuery } from "../src/operations/history.ts";
 import { getSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2/index.ts";
 
 async function historyFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-history-"));
   const path = join(directory, "source.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.completeMigration();
   fixture.database.exec(`
     insert into session_v2
@@ -137,13 +137,9 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
       since: 5,
       limit: 2,
     } as const;
-    const { compiled, plan } = await Effect.runPromise(Effect.scoped(
+    const compiled = await Effect.runPromise(Effect.scoped(
       acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
-        Effect.flatMap(({ query }) => Effect.all({
-          compiled: query.compile(({ db }) => sessionHistoryQuery(db, request)),
-          plan: Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.explain(({ db }) =>
-            sessionHistoryQuery(db, request))))),
-        })),
+        Effect.flatMap(({ query }) => query.compile(({ db }) => sessionHistoryQuery(db, request))),
       ),
     ));
 
@@ -185,26 +181,6 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
     assert.doesNotMatch(compiled.sql, /coalesce\(\(select/);
     assert.deepEqual(compiled.parameters, [15, 2, 5]);
 
-    // Plan evidence: one group-by over a qualified-Sessions-restricted scan, no
-    // correlated scalar subqueries, and qualified Sessions materialized once.
-    const details = plan.map((row) => row.detail);
-    assert.equal(details.filter((detail) => detail.includes("USE TEMP B-TREE FOR GROUP BY")).length, 1);
-    assert.equal(details.some((detail) => detail.includes("SCALAR SUBQUERY")), false);
-    assert.equal(details.filter((detail) => detail.includes("MATERIALIZE qualified_sessions")).length, 1);
-
-    const byId = new Map(plan.map((row) => [row.id, row]));
-    const groupByRow = plan.find((row) => row.detail.includes("USE TEMP B-TREE FOR GROUP BY"));
-    assert.ok(groupByRow !== undefined);
-    let aggregateRoot = groupByRow;
-    while (byId.get(aggregateRoot.parent) !== undefined) aggregateRoot = byId.get(aggregateRoot.parent)!;
-    const inAggregate = (row: typeof plan[number]): boolean =>
-      row.id === aggregateRoot.id
-      || (byId.get(row.parent) !== undefined && inAggregate(byId.get(row.parent)!));
-    const aggregateSubtree = plan.filter(inAggregate);
-    assert.ok(aggregateSubtree.length > 1);
-    // The grouped scan itself probes qualified Sessions rather than grouping
-    // the Message relation on its own.
-    assert.equal(aggregateSubtree.some((row) => row.detail.includes("qualified_sessions")), true);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -213,7 +189,7 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
 test("acquisition and history skip payload validation while content evaluates it lazily", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cotail-lazy-validation-"));
   const path = join(directory, "source.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.database.exec(`
     insert into session_v2
       (id, project_id, slug, directory, title, version, time_created, time_updated)

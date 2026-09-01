@@ -4,10 +4,10 @@ import { Kysely, SqliteDialect } from "kysely";
 import { logicalWorld } from "../src/relations/world.ts";
 import { ReadonlyNodeSqliteDatabase } from "../src/runtime/node-sqlite.ts";
 import type { PhysicalOpenCodeV2 } from "../src/source/contracts.ts";
-import { openCodeV2Fixture } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture } from "./fixtures/opencode-v2/index.ts";
 
 function contentFixture() {
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.database.exec(`
     insert into session_v2 (
       id, project_id, slug, directory, title, version, cost,

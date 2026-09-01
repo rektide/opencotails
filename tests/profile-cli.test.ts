@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { parseSourceProfile } from "@opencoattails/query-kysely";
-import { createCliDatabase } from "./fixtures/cli-database.ts";
+import {
+  createCliDatabase,
+  writeMalformedSourceProfile,
+  writeVersionExecutable,
+} from "./fixtures/profile/index.ts";
 
 interface CliResult {
   readonly status: number | null;
@@ -22,16 +26,6 @@ interface Fixture {
   readonly profile: string;
 }
 
-async function writeExecutable(path: string, version: string, namedOutput = true): Promise<void> {
-  await writeFile(path, `#!/usr/bin/env node
-import { appendFile } from "node:fs/promises";
-await appendFile(process.env.PROFILE_INVOCATION_LOG, process.argv.slice(2).join(" ") + "\\n");
-process.stderr.write("diagnostic: ${namedOutput ? "local development build" : "opencode version cache stale"}\\n");
-process.stdout.write("${namedOutput ? "opencode2 " : ""}v${version}\\n");
-`);
-  await chmod(path, 0o755);
-}
-
 async function fixture(t: TestContext): Promise<Fixture> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-profile-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -39,8 +33,8 @@ async function fixture(t: TestContext): Promise<Fixture> {
   const executable = join(directory, "opencode-fixture");
   const invocations = join(directory, "invocations.log");
   const profile = join(directory, "profile.json");
-  createCliDatabase(database);
-  await writeExecutable(executable, "0.0.0-local-fixture");
+  await createCliDatabase(database);
+  await writeVersionExecutable({ path: executable, version: "0.0.0-local-fixture" });
   await writeFile(invocations, "");
   return { directory, database, executable, invocations, profile };
 }
@@ -228,7 +222,11 @@ test("plan validation rejects recorded certificates as unsupported rather than c
 test("profile refresh preserves profile identity and source path while replacing version facts atomically", async (t) => {
   const input = await fixture(t);
   assert.equal((await generate(input)).status, 0);
-  await writeExecutable(input.executable, "0.0.0-local-refreshed", false);
+  await writeVersionExecutable({
+    path: input.executable,
+    version: "0.0.0-local-refreshed",
+    namedOutput: false,
+  });
   const result = await cli(["profile", "refresh", "--profile", input.profile], input);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, `refreshed profile fixture at ${input.profile}\n`);
@@ -295,7 +293,7 @@ test("ordinary commands report missing and malformed profiles with exact generat
   assert.equal(await readFile(input.invocations, "utf8"), "");
 
   const malformed = join(input.directory, "malformed.json");
-  await writeFile(malformed, "{\n");
+  await writeMalformedSourceProfile(malformed);
   const malformedResult = await cli([
     "get-session", "-s", "ses_newest_abcdefghijkl",
     "--profile", malformed,

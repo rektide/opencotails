@@ -17,7 +17,7 @@ import type { SessionReport } from "../src/domain/session-report.ts";
 import { captureSessionReport } from "../src/operations/capture.ts";
 import { SessionNotFoundError } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2/index.ts";
 
 interface CaptureFixture {
   readonly directory: string;
@@ -27,7 +27,7 @@ interface CaptureFixture {
 async function captureFixture(updatedAt: number): Promise<CaptureFixture> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-capture-"));
   const path = join(directory, "source.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.completeMigration();
   fixture.database.prepare(`
     insert into session_v2 (

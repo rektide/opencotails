@@ -10,12 +10,12 @@ import { sessionDirectoryExact } from "../src/direct/session.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2/index.ts";
 
 async function searchFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-search-"));
   const path = join(directory, "source.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.completeMigration();
   fixture.database.exec(`
     insert into session_v2

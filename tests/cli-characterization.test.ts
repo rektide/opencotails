@@ -4,16 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test, { after } from "node:test";
-import { createCliDatabase, createV1OnlyCliDatabase } from "./fixtures/cli-database.ts";
-import { writeCliSourceProfile } from "./fixtures/source-profile.ts";
+import {
+  createCliDatabase,
+  createV1OnlyCliDatabase,
+  writeCliSourceProfile,
+} from "./fixtures/profile/index.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "cotail-characterization-"));
 const database = join(directory, "fixture.db");
-createCliDatabase(database);
+await createCliDatabase(database);
 const profile = join(directory, "fixture-profile.json");
 await writeCliSourceProfile(database, profile);
 const v1Database = join(directory, "v1.db");
-createV1OnlyCliDatabase(v1Database);
+await createV1OnlyCliDatabase(v1Database);
 after(() => rmSync(directory, { recursive: true, force: true }));
 
 function cli(args: readonly string[]) {

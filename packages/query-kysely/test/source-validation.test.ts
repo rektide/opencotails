@@ -10,7 +10,7 @@ import {
   validateStoredMessagePayload,
 } from "../src/source/index.ts";
 import { inspectOpenCodeV2Source } from "../src/source/validation.ts";
-import { openCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2.ts";
+import { behaviorOpenCodeV2Fixture, validMessageData } from "./fixtures/opencode-v2/index.ts";
 
 const inspect = (database: DatabaseSync) => Effect.runSync(inspectOpenCodeV2Source(database));
 
@@ -21,7 +21,7 @@ function failure(database: DatabaseSync) {
 }
 
 test("accepts the authoritative V2 projection and reports schema capabilities", () => {
-  const fixture = openCodeV2Fixture({ pendingInput: true });
+  const fixture = behaviorOpenCodeV2Fixture({ pendingInput: true });
   try {
     for (const type of CURRENT_MESSAGE_VARIANTS) fixture.addMessage(type);
     const capabilities = inspect(fixture.database);
@@ -37,7 +37,7 @@ test("accepts the authoritative V2 projection and reports schema capabilities", 
 });
 
 test("accepts schema-valid nested attachments, tool states, shell output, and compaction variants", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.addMessage("user", {
       ...validMessageData("user", "msg_user"),
@@ -75,7 +75,7 @@ test("accepts schema-valid nested attachments, tool states, shell output, and co
 });
 
 test("accepts and validates structured location-switched Messages", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.addMessage("location-switched", undefined, "msg_location");
     assert.doesNotThrow(() => inspect(fixture.database));
@@ -101,7 +101,7 @@ test("rejects a complete V1-only database explicitly", () => {
 });
 
 test("requires every current authoritative column", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.database.exec("alter table session_message drop column time_updated");
     const error = failure(fixture.database);
@@ -115,8 +115,8 @@ test("requires every current authoritative column", () => {
 });
 
 test("requires a completed migration marker only when legacy session rows remain", () => {
-  const emptyResidue = openCodeV2Fixture();
-  const legacyRows = openCodeV2Fixture();
+  const emptyResidue = behaviorOpenCodeV2Fixture();
+  const legacyRows = behaviorOpenCodeV2Fixture();
   try {
     emptyResidue.database.exec("create table session (id text); create table message (garbage text); create table part (garbage text)");
     assert.doesNotThrow(() => inspect(emptyResidue.database));
@@ -142,7 +142,7 @@ test("requires a completed migration marker only when legacy session rows remain
 });
 
 test("ignores preserved V1 message and part residue after migration", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.addLegacySession();
     fixture.database.exec("create table message (unexpected blob); create table part (also_unexpected blob)");
@@ -155,8 +155,8 @@ test("ignores preserved V1 message and part residue after migration", () => {
 });
 
 test("rejects unknown Message variants without parsing stored Message JSON", () => {
-  const unknown = openCodeV2Fixture();
-  const malformed = openCodeV2Fixture();
+  const unknown = behaviorOpenCodeV2Fixture();
+  const malformed = behaviorOpenCodeV2Fixture();
   try {
     unknown.addMessage("future-message");
     const unknownError = failure(unknown.database);
@@ -201,7 +201,7 @@ test("the reusable stored-payload validator reports message identity and precise
   ] as const;
 
   for (const [type, data, path] of cases) {
-    const fixture = openCodeV2Fixture();
+    const fixture = behaviorOpenCodeV2Fixture();
     try {
       let error: unknown;
       try {
@@ -221,7 +221,7 @@ test("the reusable stored-payload validator reports message identity and precise
 });
 
 test("reconstructs column identity before validating stored Message data", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.addMessage("system", { text: "visible", time: { created: 1 } }, "msg_row");
     const stored = fixture.database.prepare("select data from session_message where id = 'msg_row'").get() as { data: string };
@@ -233,8 +233,8 @@ test("reconstructs column identity before validating stored Message data", () =>
 });
 
 test("event table existence and watermarks do not claim payload persistence", () => {
-  const fixture = openCodeV2Fixture();
-  const absent = openCodeV2Fixture({ events: false });
+  const fixture = behaviorOpenCodeV2Fixture();
+  const absent = behaviorOpenCodeV2Fixture({ events: false });
   try {
     fixture.database.prepare("insert into event_sequence values ('ses_fixture', 42, null)").run();
     assert.equal(inspect(fixture.database).eventRows, "unavailable");
@@ -249,7 +249,7 @@ test("event table existence and watermarks do not claim payload persistence", ()
 });
 
 test("rejects a partial optional event layout", () => {
-  const fixture = openCodeV2Fixture();
+  const fixture = behaviorOpenCodeV2Fixture();
   try {
     fixture.database.exec("drop table event");
     const error = failure(fixture.database);

@@ -6,12 +6,12 @@ import test from "node:test";
 import { Effect } from "effect";
 import { all } from "../src/query/logical-query.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2/index.ts";
 
 async function queryFixture(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-query-"));
   const path = join(directory, "opencode.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.database.exec(`
     insert into session_v2 (
       id, project_id, slug, directory, title, version, cost,

@@ -8,12 +8,12 @@ import { all } from "../src/query/logical-query.ts";
 import { sql } from "kysely";
 import { literal, regex } from "../src/direct/match.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2/index.ts";
 
 async function sourceFile(): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-direct-"));
   const path = join(directory, "source.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.completeMigration();
   fixture.database.prepare(`insert into session_v2
     (id, project_id, slug, directory, title, version, time_created, time_updated)

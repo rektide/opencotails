@@ -6,12 +6,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { after } from "node:test";
 import { Table, tableFromIPC } from "apache-arrow";
-import { createCliDatabase } from "./fixtures/cli-database.ts";
-import { writeCliSourceProfile } from "./fixtures/source-profile.ts";
+import { createCliDatabase, writeCliSourceProfile } from "./fixtures/profile/index.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "cotail-arrow-"));
 const database = join(directory, "fixture.db");
-createCliDatabase(database);
+await createCliDatabase(database);
 const profile = join(directory, "fixture-profile.json");
 await writeCliSourceProfile(database, profile);
 const fixture = new DatabaseSync(database);

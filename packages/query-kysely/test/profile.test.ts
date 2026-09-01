@@ -5,11 +5,15 @@ import {
   createSourceProfile,
   decodeSourceProfile,
   deriveIndexCapability,
+  deriveIndexCapabilities,
+  extractObservedMessageVariants,
+  extractOpenCodeProfileSchema,
   extractSqliteProfileSchema,
   SourceProfileDecodeError,
   UnsupportedObservedMessageVariantsError,
 } from "../src/profile/index.ts";
 import { CURRENT_MESSAGE_VARIANTS } from "../src/source/index.ts";
+import { indexedOpenCodeV2Fixture } from "./fixtures/opencode-v2/index.ts";
 
 function indexedDatabase(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
@@ -274,5 +278,38 @@ test("profile construction rejects an empty explicit compatible-version allowlis
     }), /compatibleVersions must contain at least one version/u);
   } finally {
     database.close();
+  }
+});
+
+test("indexed OpenCode fixtures expose production access paths and every supported Message variant", () => {
+  const fixture = indexedOpenCodeV2Fixture({ pendingInput: true });
+  try {
+    fixture.addAllMessageVariants();
+    const schema = extractOpenCodeProfileSchema(fixture.database);
+    assert.deepEqual(deriveIndexCapabilities(schema), {
+      "history.message_owner_lookup": {
+        status: "indexed",
+        index: "session_message_session_seq_idx",
+        equality_prefix: ["session_id"],
+      },
+      "message.timeline": {
+        status: "indexed",
+        index: "session_message_session_seq_idx",
+        equality_prefix: ["session_id"],
+      },
+    });
+    assert.deepEqual(extractObservedMessageVariants(fixture.database), [...CURRENT_MESSAGE_VARIANTS].sort());
+    assert.deepEqual(
+      schema.tables.session_message!.indexes.map(({ name }) => name),
+      [
+        "session_message_session_seq_idx",
+        "session_message_session_time_created_id_idx",
+        "session_message_session_type_seq_idx",
+        "session_message_time_created_idx",
+        "sqlite_autoindex_session_message_1",
+      ],
+    );
+  } finally {
+    fixture.database.close();
   }
 });

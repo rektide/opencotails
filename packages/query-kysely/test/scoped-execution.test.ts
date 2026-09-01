@@ -14,7 +14,7 @@ import {
   acquireNodeOpenCodeSourceForTest,
   type NodeSqliteTestAction,
 } from "../src/runtime/node-sqlite.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2/index.ts";
 
 async function walFixture(): Promise<{
   readonly directory: string;
@@ -23,7 +23,7 @@ async function walFixture(): Promise<{
 }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-scoped-"));
   const path = join(directory, "opencode.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
 

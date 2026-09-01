@@ -6,12 +6,13 @@ import {
   CURRENT_MESSAGE_VARIANTS,
   extractObservedMessageVariants,
   extractOpenCodeProfileSchema,
+  type SourceProfile,
 } from "@opencoattails/query-kysely";
 
-export async function writeCliSourceProfile(databasePath: string, profilePath: string): Promise<void> {
+export async function deterministicSourceProfile(databasePath: string): Promise<SourceProfile> {
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    const profile = createSourceProfile({
+    return createSourceProfile({
       profileID: "fixture",
       generatedAt: "2026-09-01T00:00:00.000Z",
       generatorVersion: "0.1.0",
@@ -22,8 +23,15 @@ export async function writeCliSourceProfile(databasePath: string, profilePath: s
       supportedMessageVariants: [...CURRENT_MESSAGE_VARIANTS],
       observedMessageVariants: extractObservedMessageVariants(database),
     });
-    await writeFile(profilePath, `${canonicalJson(profile)}\n`);
   } finally {
     database.close();
   }
+}
+
+export async function writeCliSourceProfile(databasePath: string, profilePath: string): Promise<void> {
+  await writeFile(profilePath, `${canonicalJson(await deterministicSourceProfile(databasePath))}\n`);
+}
+
+export async function writeMalformedSourceProfile(profilePath: string): Promise<void> {
+  await writeFile(profilePath, "{\n");
 }

@@ -11,12 +11,12 @@ import {
   logicalKyselyQueryKey,
   nodeLogicalKyselyQueryFactory,
 } from "../src/runtime/registry.ts";
-import { openCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2.ts";
+import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts } from "./fixtures/opencode-v2/index.ts";
 
 test("registers the canonical scoped logical world", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cotail-registry-"));
   const path = join(directory, "opencode.db");
-  const fixture = openCodeV2Fixture();
+  const fixture = indexedOpenCodeV2Fixture();
   fixture.database.exec(`
     insert into session_v2 (
       id, project_id, slug, directory, version, cost, tokens_input,
