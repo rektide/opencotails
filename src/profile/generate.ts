@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { resolve } from "node:path";
+import packageMetadata from "../../package.json" with { type: "json" };
 import {
   createSourceProfile,
   CURRENT_MESSAGE_VARIANTS,
@@ -10,7 +11,7 @@ import {
 } from "@opencoattails/query-kysely";
 import { runOpenCodeVersion } from "../opencode/version.ts";
 
-export const COTAIL_VERSION = "0.1.0";
+export const COTAIL_VERSION = packageMetadata.version;
 
 export interface GenerateSourceProfileRequest {
   readonly profileID: string;
