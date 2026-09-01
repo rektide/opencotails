@@ -54,10 +54,10 @@ function validateSessionHistoryRequest(request: SessionHistoryRequest): void {
 /**
  * The sole history selection. Sessions are qualified first — predicate,
  * deterministic order, and optional limit — into one CTE. The single grouped
- * `cotail_message` aggregate inner-joins those qualified Sessions before
- * grouping, so it never groups Messages of unrelated Sessions. Counts are
- * left-joined back so zero-message qualified Sessions survive. There are no
- * correlated count subqueries.
+ * `cotail_message` aggregate uses the qualified Sessions as a CROSS JOIN outer
+ * loop before grouping, so an indexed source searches Messages by selected
+ * owner rather than scanning unrelated owners. Counts are left-joined back so
+ * zero-message qualified Sessions survive. There are no correlated counts.
  */
 export function sessionHistoryQuery(db: ReadonlyQueryCreator<CotailRelations>, request: SessionHistoryRequest) {
   validateSessionHistoryRequest(request);
@@ -72,8 +72,9 @@ export function sessionHistoryQuery(db: ReadonlyQueryCreator<CotailRelations>, r
       if (request.limit !== undefined) qualified = qualified.limit(request.limit);
       return qualified;
     })
-    .with("session_activity", (qb) => qb.selectFrom("cotail_message")
-      .innerJoin("qualified_sessions", "qualified_sessions.sessionID", "cotail_message.sessionID")
+    .with("session_activity", (qb) => qb.selectFrom("qualified_sessions")
+      .crossJoin("cotail_message")
+      .whereRef("cotail_message.sessionID", "=", "qualified_sessions.sessionID")
       .select((eb) => [
         "cotail_message.sessionID",
         eb.fn.countAll<number>().as("messagesTotal"),

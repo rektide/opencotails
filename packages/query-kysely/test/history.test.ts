@@ -12,7 +12,7 @@ import { getSession } from "../src/operations/resolve.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
 import { indexedOpenCodeV2Fixture, trustedSourceProfileFacts, validMessageData } from "./fixtures/opencode-v2/index.ts";
 
-async function historyFixture(): Promise<{ readonly directory: string; readonly path: string }> {
+async function historyFixture(unrelatedMessages = 0): Promise<{ readonly directory: string; readonly path: string }> {
   const directory = await mkdtemp(join(tmpdir(), "cotail-history-"));
   const path = join(directory, "source.db");
   const fixture = indexedOpenCodeV2Fixture();
@@ -38,6 +38,11 @@ async function historyFixture(): Promise<{ readonly directory: string; readonly 
     ["msg_compaction", "ses_b", "compaction", 6, 7], ["msg_c", "ses_c", "user", 0, 8],
     ["msg_old_a", "ses_old", "user", 0, 1], ["msg_old_b", "ses_old", "user", 1, 6],
   ] as const) insert.run(id, session, type, seq, time, time, JSON.stringify(validMessageData(type, id, time)));
+  for (let index = 0; index < unrelatedMessages; index++) {
+    const id = `msg_unrelated_${index}`;
+    insert.run(id, "ses_old", "system", index + 2, index + 10, index + 10,
+      JSON.stringify(validMessageData("system", id, index + 10)));
+  }
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
   return { directory, path };
@@ -61,6 +66,17 @@ async function withQuery<A>(path: string, run: (query: Parameters<typeof getSess
 
 const idOf = (row: { readonly session: { readonly target: { readonly address: { readonly sessionID: string } } } }) =>
   row.session.target.address.sessionID;
+
+function assertSelectedOwnerHistoryPlan(details: readonly string[]): void {
+  assert.equal(details.filter((detail) => /MATERIALIZE qualified_sessions/u.test(detail)).length, 1);
+  const selectedScan = details.findIndex((detail) => /SCAN qualified_sessions/u.test(detail));
+  const messageSearch = details.findIndex((detail) =>
+    /SEARCH session_message USING (?:COVERING )?INDEX \S+ \(session_id=\?\)/u.test(detail));
+  assert.ok(selectedScan >= 0, `missing selected Session outer access:\n${details.join("\n")}`);
+  assert.ok(messageSearch > selectedScan, `Message owner search did not follow selected Sessions:\n${details.join("\n")}`);
+  assert.equal(details.some((detail) => /SCAN session_message/u.test(detail)), false);
+  assert.equal(details.some((detail) => /CORRELATED SCALAR SUBQUERY/u.test(detail)), false);
+}
 
 test("returns canonical Session observations with one-pass activity counts per variant", async () => {
   const fixture = await historyFixture();
@@ -160,13 +176,13 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
     );
     assert.match(qualified, /limit \?\)$/);
 
-    // Exactly one grouped aggregate, and it inner-joins the qualified Sessions
-    // before grouping, so Messages of non-qualified Sessions are never grouped.
+    // Exactly one grouped aggregate. CROSS JOIN deliberately pins qualified
+    // Sessions as SQLite's outer loop; the equality remains a separate filter.
     assert.equal((compiled.sql.match(/count\(\*\)/g) ?? []).length, 1);
     assert.equal((compiled.sql.match(/group by/g) ?? []).length, 1);
     assert.match(
       activity,
-      /from "cotail_message" inner join "qualified_sessions" on "qualified_sessions"\."sessionID" = "cotail_message"\."sessionID"/,
+      /from "qualified_sessions" cross join "cotail_message" where "cotail_message"\."sessionID" = "qualified_sessions"\."sessionID"/,
     );
     assert.match(activity, /sum\(case when "cotail_message"\."createdAt" >= \? then 1 else 0 end\)/);
     assert.match(activity, /group by "cotail_message"\."sessionID"$/);
@@ -181,6 +197,32 @@ test("qualifies Sessions first and restricts the one grouped Message aggregate t
     assert.doesNotMatch(compiled.sql, /coalesce\(\(select/);
     assert.deepEqual(compiled.parameters, [15, 2, 5]);
 
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("history activity searches Messages from the selected Session page on the indexed profile", async () => {
+  const fixture = await historyFixture(1_000);
+  try {
+    const request = {
+      predicate: sessionUpdatedRange({ from: 15 }),
+      since: 5,
+      limit: 1,
+    } as const;
+    const result = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({ path: fixture.path, sourceID: "fixture", profile: trustedSourceProfileFacts }).pipe(
+        Effect.flatMap(({ query }) => query.openRead.pipe(Effect.flatMap((read) => Effect.all({
+          rows: read.all(({ db }) => sessionHistoryQuery(db, request)),
+          plan: read.explain(({ db }) => sessionHistoryQuery(db, request)),
+        })))),
+      ),
+    ));
+
+    assert.deepEqual(result.rows.map((row) => [row.sessionID, row.messagesTotal, row.messagesSince]), [
+      ["ses_c", 1, 1],
+    ]);
+    assertSelectedOwnerHistoryPlan(result.plan.map(({ detail }) => detail));
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
