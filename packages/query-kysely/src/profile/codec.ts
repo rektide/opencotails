@@ -64,7 +64,7 @@ function stringArray(value: unknown, path: string, sorted = true): readonly stri
   if (!Array.isArray(value)) throw new SourceProfileDecodeError(path, "expected array");
   const result = value.map((item, index) => text(item, `${path}[${index}]`));
   if (new Set(result).size !== result.length) throw new SourceProfileDecodeError(path, "expected unique values");
-  if (sorted && result.some((item, index) => index > 0 && result[index - 1]!.localeCompare(item) > 0)) {
+  if (sorted && result.some((item, index) => index > 0 && result[index - 1]! > item)) {
     throw new SourceProfileDecodeError(path, "expected sorted values");
   }
   return result;

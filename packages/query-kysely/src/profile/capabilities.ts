@@ -82,7 +82,7 @@ export function deriveIndexCapabilities(
   requirements: Readonly<Record<string, IndexRequirement>> = SOURCE_PROFILE_INDEX_REQUIREMENTS,
 ): Readonly<Record<string, IndexCapability>> {
   return Object.fromEntries(
-    Object.entries(requirements).sort(([left], [right]) => left.localeCompare(right))
+    Object.entries(requirements).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
       .map(([name, requirement]) => [name, deriveIndexCapability(schema, requirement)]),
   );
 }
