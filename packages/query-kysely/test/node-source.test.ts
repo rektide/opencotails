@@ -65,11 +65,23 @@ test("fails missing read-only sources before exposing a query world", async () =
   assert(Cause.squash(exit.cause) instanceof SourceOpenError);
 });
 
-test("trusts supplied profile facts unchanged without schema or Message type scans", async (t) => {
+test("passes profile facts unchanged and prepares no source-inspection statements", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "cotail-trusted-source-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, "empty.db");
   new DatabaseSync(path).close();
+  const prepared: string[] = [];
+  const executed: string[] = [];
+  const originalPrepare = DatabaseSync.prototype.prepare;
+  const originalExec = DatabaseSync.prototype.exec;
+  t.mock.method(DatabaseSync.prototype, "prepare", function(this: DatabaseSync, sql: string) {
+    prepared.push(sql);
+    return originalPrepare.call(this, sql);
+  });
+  t.mock.method(DatabaseSync.prototype, "exec", function(this: DatabaseSync, sql: string) {
+    executed.push(sql);
+    return originalExec.call(this, sql);
+  });
   const capabilities = Object.freeze({
     "future.lookup": Object.freeze({ status: "indexed" as const, index: "not_present", equality_prefix: ["owner"] }),
   });
@@ -92,4 +104,10 @@ test("trusts supplied profile facts unchanged without schema or Message type sca
   assert.equal(result.source.capabilities, capabilities);
   assert.equal(contextProfile, profile);
   assert.deepEqual(result.rows.map((row) => ({ ...row })), [{ value: 1 }]);
+  assert.deepEqual(
+    executed.filter((sql) => /^\s*pragma\b/iu.test(sql)),
+    ["PRAGMA query_only = ON"],
+  );
+  const inspection = /sqlite_(?:schema|master)|pragma_(?:table|index)|pragma\s+(?:table|index)|select\s+distinct\s+type|migration\.v1-v2|explain\s+query\s+plan/iu;
+  for (const sql of [...prepared, ...executed]) assert.doesNotMatch(sql, inspection);
 });

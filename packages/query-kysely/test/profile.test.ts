@@ -300,6 +300,20 @@ test("indexed OpenCode fixtures expose production access paths and every support
     });
     assert.deepEqual(extractObservedMessageVariants(fixture.database), [...CURRENT_MESSAGE_VARIANTS].sort());
     assert.deepEqual(
+      schema.tables.session_v2!.columns.slice(-9).map(({ name }) => name),
+      [
+        "time_created",
+        "time_updated",
+        "time_idle",
+        "time_viewed",
+        "idle_outcome",
+        "time_compacting",
+        "time_archived",
+        "time_suspended",
+        "resume_attempts",
+      ],
+    );
+    assert.deepEqual(
       schema.tables.session_message!.indexes.map(({ name }) => name),
       [
         "session_message_session_seq_idx",
