@@ -60,11 +60,11 @@ function literal<const V extends string>(value: unknown, path: string, values: r
   return value as V;
 }
 
-function stringArray(value: unknown, path: string): readonly string[] {
+function stringArray(value: unknown, path: string, sorted = true): readonly string[] {
   if (!Array.isArray(value)) throw new SourceProfileDecodeError(path, "expected array");
   const result = value.map((item, index) => text(item, `${path}[${index}]`));
   if (new Set(result).size !== result.length) throw new SourceProfileDecodeError(path, "expected unique values");
-  if (result.some((item, index) => index > 0 && result[index - 1]!.localeCompare(item) > 0)) {
+  if (sorted && result.some((item, index) => index > 0 && result[index - 1]!.localeCompare(item) > 0)) {
     throw new SourceProfileDecodeError(path, "expected sorted values");
   }
   return result;
@@ -163,7 +163,7 @@ function capability(value: unknown, path: string): IndexCapability {
   return {
     status,
     index: text(item.index, `${path}.index`),
-    equality_prefix: stringArray(item.equality_prefix, `${path}.equality_prefix`),
+    equality_prefix: stringArray(item.equality_prefix, `${path}.equality_prefix`, false),
   };
 }
 
@@ -179,7 +179,7 @@ function certificate(value: unknown, path: string): SourceProfilePlanCertificate
     outer: text(item.outer, `${path}.outer`),
     related: text(item.related, `${path}.related`),
     access: literal(item.access, `${path}.access`, ["search"] as const),
-    keys: stringArray(item.keys, `${path}.keys`),
+    keys: stringArray(item.keys, `${path}.keys`, false),
   };
 }
 
@@ -206,6 +206,12 @@ export function decodeSourceProfile(value: unknown): SourceProfile {
     certificates = Object.fromEntries(Object.entries(values).map(([name, value]) =>
       [name, certificate(value, `$.certificates.${name}`)]));
   }
+  const supportedMessageVariants = stringArray(content.supported_message_variants, "$.content.supported_message_variants");
+  const observedMessageVariants = stringArray(content.observed_message_variants, "$.content.observed_message_variants");
+  const supportedSet = new Set(supportedMessageVariants);
+  if (observedMessageVariants.some((variant) => !supportedSet.has(variant))) {
+    throw new SourceProfileDecodeError("$.content.observed_message_variants", "observed variant is not recorded as supported");
+  }
   return {
     format,
     profile_id: profileID,
@@ -229,8 +235,8 @@ export function decodeSourceProfile(value: unknown): SourceProfile {
     },
     schema: schema(root.schema, "$.schema"),
     content: {
-      supported_message_variants: stringArray(content.supported_message_variants, "$.content.supported_message_variants"),
-      observed_message_variants: stringArray(content.observed_message_variants, "$.content.observed_message_variants"),
+      supported_message_variants: supportedMessageVariants,
+      observed_message_variants: observedMessageVariants,
     },
     capabilities,
     ...(certificates === undefined ? {} : { certificates }),

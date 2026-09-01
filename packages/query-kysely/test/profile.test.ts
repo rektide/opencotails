@@ -122,6 +122,27 @@ test("derives capabilities using leftmost keys, collation, direction, expression
   }
 });
 
+test("derives equality prefixes in index order rather than predicate declaration order", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec("CREATE TABLE item (a TEXT, b TEXT); CREATE INDEX item_ab_idx ON item(a, b)");
+    const schema = extractSqliteProfileSchema(database, ["item"]);
+    assert.deepEqual(deriveIndexCapability(schema, {
+      table: "item",
+      predicates: [
+        { column: "b", operator: "equality" },
+        { column: "a", operator: "equality" },
+      ],
+    }), {
+      status: "indexed",
+      index: "item_ab_idx",
+      equality_prefix: ["a", "b"],
+    });
+  } finally {
+    database.close();
+  }
+});
+
 test("strictly decodes complete profiles without rebuilding supported variants", () => {
   const database = indexedDatabase();
   try {
@@ -141,6 +162,15 @@ test("strictly decodes complete profiles without rebuilding supported variants",
     const malformed = structuredClone(profile) as unknown as Record<string, unknown>;
     (malformed.source as Record<string, unknown>).unexpected = true;
     assert.throws(() => decodeSourceProfile(malformed), SourceProfileDecodeError);
+
+    const inconsistent = {
+      ...structuredClone(profile),
+      content: {
+        ...profile.content,
+        supported_message_variants: ["assistant"],
+      },
+    };
+    assert.throws(() => decodeSourceProfile(inconsistent), /observed variant is not recorded as supported/u);
   } finally {
     database.close();
   }

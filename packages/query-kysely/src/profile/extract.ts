@@ -43,6 +43,18 @@ export class SqliteProfileExtractionError extends Error {
   }
 }
 
+export const OPENCODE_PROFILE_REQUIRED_TABLES = Object.freeze([
+  "kv",
+  "session_message",
+  "session_v2",
+] as const);
+
+export const OPENCODE_PROFILE_OPTIONAL_TABLES = Object.freeze([
+  "event",
+  "event_sequence",
+  "session_pending",
+] as const);
+
 function number(value: unknown, field: string): number {
   const result = Number(value);
   if (!Number.isInteger(result)) throw new SqliteProfileExtractionError(`invalid SQLite metadata field ${field}`);
@@ -245,6 +257,22 @@ export function extractSqliteProfileSchema(
   const tables: Record<string, SqliteTableFact> = {};
   for (const name of names) tables[name] = extractTable(database, name);
   return withSqliteProfileHash(tables);
+}
+
+export function extractOpenCodeProfileSchema(database: DatabaseSync): SqliteProfileSchema {
+  const present = new Set(
+    (database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all() as unknown as
+      readonly { readonly name: unknown }[]).map(({ name }) => string(name, "sqlite_schema.name")),
+  );
+  const missing = OPENCODE_PROFILE_REQUIRED_TABLES.filter((name) => !present.has(name));
+  if (missing.length > 0) {
+    throw new SqliteProfileExtractionError(`required OpenCode table${missing.length === 1 ? "" : "s"} missing: ${missing.join(", ")}`);
+  }
+  const selected = [
+    ...OPENCODE_PROFILE_REQUIRED_TABLES,
+    ...OPENCODE_PROFILE_OPTIONAL_TABLES.filter((name) => present.has(name)),
+  ];
+  return extractSqliteProfileSchema(database, selected);
 }
 
 export function extractObservedMessageVariants(database: DatabaseSync): readonly string[] {

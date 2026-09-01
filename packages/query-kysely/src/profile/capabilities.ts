@@ -14,12 +14,23 @@ function columnKey(
   return key?.kind === "column" && key.column === column && key.collation.toUpperCase() === collation.toUpperCase();
 }
 
-function supports(index: SqliteIndexFact, requirement: IndexRequirement): boolean {
-  if (index.partial) return false;
+function equalityPrefix(index: SqliteIndexFact, requirement: IndexRequirement): readonly string[] | undefined {
+  if (index.partial) return undefined;
+  const remaining = [...requirement.predicates];
+  const prefix: string[] = [];
   for (let position = 0; position < requirement.predicates.length; position++) {
-    const predicate = requirement.predicates[position]!;
-    if (!columnKey(index.keys[position], predicate.column, predicate.collation ?? "BINARY")) return false;
+    const key = index.keys[position];
+    if (key?.kind !== "column") return undefined;
+    const match = remaining.findIndex((predicate) =>
+      columnKey(key, predicate.column, predicate.collation ?? "BINARY"));
+    if (match < 0) return undefined;
+    prefix.push(key.column);
+    remaining.splice(match, 1);
   }
+  return prefix;
+}
+
+function supportsOrder(index: SqliteIndexFact, requirement: IndexRequirement): boolean {
   const order = requirement.order ?? [];
   if (order.length === 0) return true;
   const offset = requirement.predicates.length;
@@ -41,13 +52,16 @@ export function deriveIndexCapability(
 ): IndexCapability {
   const table = schema.tables[requirement.table];
   if (table === undefined) return { status: "unavailable" };
-  const index = table.indexes.find((candidate) => supports(candidate, requirement));
-  return index === undefined
+  const match = table.indexes.map((index) => ({
+    index,
+    prefix: equalityPrefix(index, requirement),
+  })).find(({ index, prefix }) => prefix !== undefined && supportsOrder(index, requirement));
+  return match === undefined
     ? { status: "unavailable" }
     : {
       status: "indexed",
-      index: index.name,
-      equality_prefix: requirement.predicates.map(({ column }) => column),
+      index: match.index.name,
+      equality_prefix: match.prefix!,
     };
 }
 
