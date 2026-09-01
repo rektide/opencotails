@@ -107,6 +107,19 @@ function validateModel(value: unknown, path: string): void {
   optional(value.variant, string, `${path}.variant`, "string");
 }
 
+function validateLocation(value: unknown, path: string): void {
+  requireAt(object(value), path, "expected object");
+  requireAt(string(value.directory), `${path}.directory`, "expected string");
+  optional(value.workspaceID, string, `${path}.workspaceID`, "string");
+}
+
+function validateLocationSelection(value: unknown, path: string): void {
+  requireAt(object(value), path, "expected object");
+  validateLocation(value.location, `${path}.location`);
+  optional(value.projectID, string, `${path}.projectID`, "string");
+  optional(value.subpath, string, `${path}.subpath`, "string");
+}
+
 function validateContent(value: unknown, path: string): void {
   requireAt(object(value), path, "expected object");
   requireAt(value.type === "text" || value.type === "file", `${path}.type`, "expected text or file");
@@ -187,6 +200,10 @@ export function validateMessagePayload(id: string, type: string, value: unknown)
     case "model-switched":
       validateModel(value.model, "$.model");
       if (value.previous !== undefined) validateModel(value.previous, "$.previous");
+      break;
+    case "location-switched":
+      validateLocationSelection(value, "$");
+      if (value.previous !== undefined) validateLocationSelection(value.previous, "$.previous");
       break;
     case "user": validateUser(value); break;
     case "synthetic":

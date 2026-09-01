@@ -74,6 +74,20 @@ test("accepts schema-valid nested attachments, tool states, shell output, and co
   }
 });
 
+test("accepts and validates structured location-switched Messages", () => {
+  const fixture = openCodeV2Fixture();
+  try {
+    fixture.addMessage("location-switched", undefined, "msg_location");
+    assert.doesNotThrow(() => inspect(fixture.database));
+    const stored = fixture.database.prepare(
+      "select data from session_message where id = 'msg_location'",
+    ).get() as { readonly data: string };
+    assert.equal(validateStoredMessagePayload("msg_location", "location-switched", stored.data), stored.data);
+  } finally {
+    fixture.database.close();
+  }
+});
+
 test("rejects a complete V1-only database explicitly", () => {
   const database = new DatabaseSync(":memory:");
   database.exec("create table session (id text); create table message (id text); create table part (id text)");
@@ -159,6 +173,14 @@ test("rejects unknown Message variants without parsing stored Message JSON", () 
 
 test("the reusable stored-payload validator reports message identity and precise nested paths", () => {
   const cases = [
+    ["location-switched", {
+      ...validMessageData("location-switched", "msg_bad"),
+      location: { directory: 42 },
+    }, "$.location.directory"],
+    ["location-switched", {
+      ...validMessageData("location-switched", "msg_bad"),
+      previous: { location: { directory: "/previous", workspaceID: 42 } },
+    }, "$.previous.location.workspaceID"],
     ["user", { ...validMessageData("user", "msg_bad"), files: [{ data: "%%%", mime: "text/plain", source: { type: "inline" } }] }, "$.files[0].data"],
     ["shell", { ...validMessageData("shell", "msg_bad"), output: { output: 42, cursor: 0, size: 0, truncated: false } }, "$.output.output"],
     ["assistant", {

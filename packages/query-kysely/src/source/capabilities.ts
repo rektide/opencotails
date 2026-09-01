@@ -3,6 +3,7 @@ import { Schema } from "effect";
 export const MessageVariant = Schema.Literals([
   "agent-switched",
   "model-switched",
+  "location-switched",
   "user",
   "synthetic",
   "system",
@@ -16,6 +17,7 @@ export type MessageVariant = typeof MessageVariant.Type;
 export const CURRENT_MESSAGE_VARIANTS: ReadonlySet<MessageVariant> = new Set<MessageVariant>([
   "agent-switched",
   "model-switched",
+  "location-switched",
   "user",
   "synthetic",
   "system",

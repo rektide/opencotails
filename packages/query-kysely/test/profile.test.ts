@@ -9,6 +9,7 @@ import {
   SourceProfileDecodeError,
   UnsupportedObservedMessageVariantsError,
 } from "../src/profile/index.ts";
+import { CURRENT_MESSAGE_VARIANTS } from "../src/source/index.ts";
 
 function indexedDatabase(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
@@ -230,6 +231,27 @@ test("profile construction rejects observed variants unsupported by the supplied
       assert.deepEqual(error.variants, ["location-switched"]);
       return true;
     });
+  } finally {
+    database.close();
+  }
+});
+
+test("the current build can profile observed location-switched Messages", () => {
+  const database = indexedDatabase();
+  try {
+    const profile = createSourceProfile({
+      profileID: "fixture",
+      generatedAt: "2026-09-01T12:00:00.000Z",
+      generatorVersion: "0.1.0",
+      executable: "opencode",
+      opencodeVersion: "1.0.0",
+      sourcePath: "/data/opencode.db",
+      schema: extractSqliteProfileSchema(database, ["session_message"]),
+      supportedMessageVariants: [...CURRENT_MESSAGE_VARIANTS],
+      observedMessageVariants: ["location-switched"],
+    });
+    assert.deepEqual(profile.content.observed_message_variants, ["location-switched"]);
+    assert.equal(profile.content.supported_message_variants.includes("location-switched"), true);
   } finally {
     database.close();
   }
