@@ -187,6 +187,9 @@ test("validation detects newly present relevant optional tables but ignores unre
   const relevant = await cli(["profile", "validate", "--profile", input.profile, "--schema"], input);
   assert.equal(relevant.status, 1);
   assert.equal(relevant.stdout, "schema: mismatch\n");
+  const relevantIndexes = await cli(["profile", "validate", "--profile", input.profile, "--indexes"], input);
+  assert.equal(relevantIndexes.status, 1);
+  assert.equal(relevantIndexes.stdout, "indexes: mismatch\n");
 
   assert.equal((await generate(input)).status, 0);
   database = new DatabaseSync(input.database);
