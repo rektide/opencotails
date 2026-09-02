@@ -7,17 +7,21 @@ Use it to find sessions by content, inspect recent work, or resolve the session 
 ```sh
 cotail search "migration" "sqlite" --profile ~/.config/cotail/profiles/opencode-local.json
 cotail history --since 7d --profile ~/.config/cotail/profiles/opencode-local.json
+cotail tail --since 30m --json --profile ~/.config/cotail/profiles/opencode-local.json
+cotail watch --no-initial --json --profile ~/.config/cotail/profiles/opencode-local.json
 cotail get-session --id-only --profile ~/.config/cotail/profiles/opencode-local.json
 ```
 
 ## Status
 
-The current CLI is an early `0.1.0` release with three working commands:
+The current CLI is an early `0.1.0` release with five working commands:
 
 | Command | Purpose |
 |---|---|
 | `cotail search` | Find sessions whose content matches every requested term |
 | `cotail history` | List sessions active within a time window |
+| `cotail tail` | List finite recent Message activity |
+| `cotail watch` | Observe newly visible Message activity |
 | `cotail get-session` | Resolve a Session from an ID, directory, or OpenCode process |
 
 Queries read OpenCode's live database directly using a trusted generated source profile. There is no Cotail data index or build step, and no `index` or `status` command yet.
@@ -56,7 +60,7 @@ node src/cli.ts history --since 24h
 
 ## Source Profiles
 
-`search`, `history`, and `get-session` require a strictly decoded source profile. They select one in this order:
+`search`, `history`, `tail`, `watch`, and `get-session` require a strictly decoded source profile. They select one in this order:
 
 1. The command's `--profile <path>` option.
 2. `$XDG_CONFIG_HOME/cotail/profiles/opencode-local.json`, or `~/.config/cotail/profiles/opencode-local.json` when `XDG_CONFIG_HOME` is unset.
@@ -170,6 +174,47 @@ cotail history --arrow > history.arrow
 
 The output distinguishes Messages created at or after the cutoff (`RECENT`) from all Messages in the Session (`TOTAL`). Both counts use only V2 `session_message` rows.
 
+## Tail And Watch
+
+```sh
+cotail tail --since 30m --limit 20
+cotail tail --since 2026-09-01T12:00:00Z --format jsonl
+cotail watch --since 30m --interval 2s --format human
+cotail watch --no-initial --interval 1s --json
+cotail watch --once --since 7d --limit 100 --json
+```
+
+`tail` lists finite Message metadata ordered by creation time and Message ID,
+newest first. `watch` repeatedly samples the same bounded view and emits Message
+identities not previously seen by that process. Initial and later rows are
+explicitly labeled `initial` and `subsequent`; they are observations, not claims
+about exact causal events.
+
+Both commands are metadata-only. They return source, Session, and Message
+identity; Message type, sequence, and row timestamps; and Session title and
+directory. They do not read or validate Message payload JSON.
+
+### Tail And Watch Options
+
+| Option | Tail | Watch | Meaning |
+|---|---:|---:|---|
+| `--since <duration-or-ISO>` | Yes | Yes | Message-created cutoff; default `24h`. Watch durations move while ISO cutoffs stay fixed. |
+| `--limit <n>` | Yes | Yes | Positive finite result/sample size; default `50` |
+| `--interval <duration>` | No | Yes | Delay between non-overlapping samples; default `2s` |
+| `--format human\|jsonl` | Yes | Yes | Explicit output format; default `human` |
+| `--json` | Yes | Yes | Alias for `--format jsonl` |
+| `--no-initial` | No | Yes | Establish the first sample silently |
+| `--once` | No | Yes | Emit one bounded sample and exit |
+| `--profile <path>` | Yes | Yes | Use an explicit trusted source profile |
+| `--db <path>` | Yes | Yes | Override the database locator recorded in the profile |
+
+Human activity is one tab-delimited physical line per Message with no header,
+footer, color, or cursor movement. JSON output is one complete object per line.
+Watch handles SIGINT, SIGTERM, and downstream EPIPE cleanly. Because each sample
+is a finite top-N view, activity that enters and leaves between samples can be
+missed; the command deliberately says "newly visible" rather than promising an
+exact durable event tail.
+
 ## Get Session
 
 ```sh
@@ -214,13 +259,13 @@ When PID metadata provides `OPENCODE_DB`, that path is used for the process look
 
 Human-readable output is the default. Machine-readable formats are written to stdout; diagnostics are written to stderr.
 
-| Format | Search | History | Get Session |
-|---|---:|---:|---:|
-| Human | Yes | Yes | Yes |
-| JSON Lines | `--json` | `--json` | `--json` |
-| TSV | No | `--tsv` | No |
-| Arrow IPC stream | `--arrow` | `--arrow` | `--arrow` |
-| Bare ID | No | No | `--id-only` |
+| Format | Search | History | Tail | Watch | Get Session |
+|---|---:|---:|---:|---:|---:|
+| Human | Yes | Yes | Yes | Yes | Yes |
+| JSON Lines | `--json` | `--json` | `--json` | `--json` | `--json` |
+| TSV | No | `--tsv` | Human contract | Human contract | No |
+| Arrow IPC stream | `--arrow` | `--arrow` | No | No | `--arrow` |
+| Bare ID | No | No | No | No | `--id-only` |
 
 Arrow output uses a command-specific schema rather than one sparse shared record. Strings are `Utf8`, counts are signed `Int64`, and times are millisecond timestamps.
 
@@ -268,6 +313,8 @@ Run the CLI directly from TypeScript during development:
 ```sh
 pnpm exec cotail search sqlite --profile ~/.config/cotail/profiles/opencode-local.json
 pnpm exec cotail history --since 24h --profile ~/.config/cotail/profiles/opencode-local.json
+pnpm exec cotail tail --since 30m --profile ~/.config/cotail/profiles/opencode-local.json
+pnpm exec cotail watch --once --profile ~/.config/cotail/profiles/opencode-local.json
 ```
 
 Run the quality gates:
