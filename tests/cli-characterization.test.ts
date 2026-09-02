@@ -89,6 +89,36 @@ test("tail rejects non-finite presentation limits", () => {
   }
 });
 
+test("watch --once emits one bounded, honestly labeled observation batch", () => {
+  const result = cli(["watch", "--once", "--since", "1970-01-01T00:00:03Z", "--limit", "3", "--json", "--db", database]);
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, "");
+  const rows = result.stdout.trimEnd().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert.deepEqual(rows.map((row) => ({
+    observation: row.observation,
+    source_id: row.source_id,
+    session_id: row.session_id,
+    message_id: row.message_id,
+  })), [
+    { observation: "initial", source_id: "fixture", session_id: "ses_other_abcdefghijkl", message_id: "msg_other" },
+    { observation: "initial", source_id: "fixture", session_id: "ses_split_abcdefghijkl", message_id: "msg_split_b" },
+    { observation: "initial", source_id: "fixture", session_id: "ses_newest_abcdefghijkl", message_id: "msg_new" },
+  ]);
+  for (const row of rows) assert.match(String(row.observed_at), /^\d{4}-\d{2}-\d{2}T/u);
+});
+
+test("watch parser rejects unsafe lifecycle combinations and intervals", () => {
+  for (const args of [
+    ["--once", "--no-initial"],
+    ["--interval", "0s"],
+    ["--interval", "1.5s"],
+    ["--limit", "0"],
+  ]) {
+    const result = cli(["watch", ...args, "--db", database]);
+    assert.equal(result.status, 2);
+  }
+});
+
 test("history rejects fractional and malformed limits without truncating them", () => {
   for (const bad of ["1.5", "abc", "-1", "1e2.5"]) {
     const result = cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", bad, "--db", database]);

@@ -16,6 +16,7 @@ Commands:
   search <pattern> [pattern...]   Search opencode sessions for matching content
   history                         List sessions active within a time window
   tail                            List finite recent Message activity
+  watch                           Observe newly visible Message activity
   get-session [pid]               Resolve the active session id for an opencode PID
   profile                         Explicitly generate, show, validate, or refresh source profiles
 
@@ -32,6 +33,8 @@ export async function main(): Promise<void> {
       return await (await import("./commands/history.ts")).run(rest);
     case "tail":
       return await (await import("./commands/tail.ts")).run(rest);
+    case "watch":
+      return await (await import("./commands/watch.ts")).run(rest);
     case "get-session":
       return await (await import("./commands/get-session.ts")).run(rest);
     case "profile":

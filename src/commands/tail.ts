@@ -4,10 +4,12 @@ import {
   readRecentMessageActivity,
 } from "@opencoattails/query-kysely";
 import { parseSince } from "../args.ts";
-import { activityOutputRecord, humanActivityLine } from "../activity-output.ts";
+import {
+  activityOutputRecord,
+  humanActivityLine,
+  type ActivityOutputFormat,
+} from "../activity-output.ts";
 import { resolveRuntimeSource } from "../profile/runtime.ts";
-
-export type ActivityOutputFormat = "human" | "jsonl";
 
 export interface TailArgs {
   readonly since: string;

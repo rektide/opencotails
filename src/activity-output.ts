@@ -1,4 +1,7 @@
 import type { MessageActivityObservation } from "@opencoattails/query-kysely";
+import type { WatchActivityObservation, WatchObservationKind } from "./watch/activity.ts";
+
+export type ActivityOutputFormat = "human" | "jsonl";
 
 export interface ActivityOutputRecord {
   readonly source_id: string;
@@ -10,6 +13,11 @@ export interface ActivityOutputRecord {
   readonly time_updated: string;
   readonly session_title: string | null;
   readonly session_directory: string;
+}
+
+export interface WatchActivityOutputRecord extends ActivityOutputRecord {
+  readonly observation: WatchObservationKind;
+  readonly observed_at: string;
 }
 
 export function activityOutputRecord(activity: MessageActivityObservation): ActivityOutputRecord {
@@ -42,4 +50,16 @@ export function humanActivityLine(record: ActivityOutputRecord): string {
     oneLine(record.session_title),
     oneLine(record.session_directory),
   ].join("\t") + "\n";
+}
+
+export function watchActivityOutputRecord(observation: WatchActivityObservation): WatchActivityOutputRecord {
+  return {
+    observation: observation.observation,
+    observed_at: new Date(observation.observedAt).toISOString(),
+    ...activityOutputRecord(observation.activity),
+  };
+}
+
+export function humanWatchActivityLine(record: WatchActivityOutputRecord): string {
+  return `${record.observed_at}\t${record.observation}\t${humanActivityLine(record)}`;
 }

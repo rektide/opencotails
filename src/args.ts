@@ -18,12 +18,36 @@ function durationMs(value: string): number | undefined {
   return m === null ? undefined : Number(m[1]) * UNITS[m[2]]!;
 }
 
-export function parseSince(since: string, option = "--since"): number {
+export type SinceSpec =
+  | { readonly kind: "relative"; readonly durationMs: number }
+  | { readonly kind: "absolute"; readonly cutoffMs: number };
+
+export function parseSinceSpec(since: string, option = "--since"): SinceSpec {
   const relative = durationMs(since);
-  if (relative !== undefined) return Date.now() - relative;
-  const abs = Date.parse(since);
-  if (!Number.isNaN(abs)) return abs;
+  if (relative !== undefined) {
+    if (!Number.isSafeInteger(relative)) throw new Error(`${option}: duration "${since}" is out of range`);
+    return { kind: "relative", durationMs: relative };
+  }
+  const absolute = Date.parse(since);
+  if (!Number.isNaN(absolute)) return { kind: "absolute", cutoffMs: absolute };
   throw new Error(`${option}: unrecognized time "${since}" (use e.g. 24h, 7d, 30m, or an ISO date)`);
+}
+
+export function cutoffAt(spec: SinceSpec, now: number): number {
+  return spec.kind === "relative" ? now - spec.durationMs : spec.cutoffMs;
+}
+
+export function parseDuration(value: string, option: string): number {
+  const duration = durationMs(value);
+  if (duration === undefined) {
+    throw new Error(`${option}: unrecognized duration "${value}" (use e.g. 2s, 30m, or 1h)`);
+  }
+  if (!Number.isSafeInteger(duration)) throw new Error(`${option}: duration "${value}" is out of range`);
+  return duration;
+}
+
+export function parseSince(since: string, option = "--since"): number {
+  return cutoffAt(parseSinceSpec(since, option), Date.now());
 }
 
 /** Message history lookback behind a `--since-updated` cutoff, or `"disabled"`. */
