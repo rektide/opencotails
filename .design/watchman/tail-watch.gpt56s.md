@@ -144,8 +144,10 @@ not one command silently changing fidelity:
 - **Rank product:** earlier research proposes recency and attention ranks, but no
   current source supplies all required current-state and attention facts. The
   appropriate universe, TTY contract, and status fidelity remain open.
-- **Runtime matrix:** this change was verified on the available Node 26 runtime.
-  Node 22 and 24 executables were not installed locally for a same-session run.
+- **Runtime matrix:** full suites were verified on the installed Node 26 runtime.
+  Focused operation, CLI, output, and lifecycle suites also passed under
+  temporary `pnpm dlx` Node 22.23.2 and Node 24.20.0 runtimes. Those versions
+  are not installed as persistent local executables.
 
 ## Cross-References
 
