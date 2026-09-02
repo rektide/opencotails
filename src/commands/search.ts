@@ -7,17 +7,24 @@ import {
   searchDirectSessions,
   sessionDirectoryContains,
   sessionPredicate,
+  sessionUpdatedRange,
   witnessName,
   type DocumentField,
   type SessionPredicate,
 } from "@opencoattails/query-kysely";
-import { parseDirectoryArg, parseSince } from "../args.ts";
+import {
+  DEFAULT_SINCE_UPDATED_BACKFILL_MS,
+  parseDirectoryArg,
+  parseSince,
+  parseSinceUpdatedBackfill,
+  type SinceUpdatedBackfill,
+} from "../args.ts";
 import { C, emitJsonl } from "../format.ts";
 import type { PartType, SearchHit } from "../opencode/types.ts";
 import { emitSearchArrow } from "../arrow.ts";
 import { resolveRuntimeSource, type RuntimeSourceSelection } from "../profile/runtime.ts";
 
-interface Args {
+export interface Args {
   terms: string[];
   dbPath?: string;
   profilePath?: string;
@@ -30,7 +37,56 @@ interface Args {
   caseSensitive: boolean;
   fixedStrings: boolean;
   directory?: string;
+  /** Exact Message-created cutoff from `--since`; honored by every mode. */
   sinceMs?: number;
+  /** Exact Session-updated cutoff; returned roots satisfy `updatedAt >= cutoff`. */
+  sinceUpdatedMs?: number;
+  /** Resolved lookback behind `sinceUpdatedMs`, or `"disabled"`; set iff `sinceUpdatedMs` is. */
+  sinceUpdatedBackfillMs?: SinceUpdatedBackfill;
+}
+
+/**
+ * Message-created lower bounds, kept distinguishable so modes can differ in
+ * which bounds they honor. Generic content search uses `fromMs`, the stricter
+ * of both bounds; exact modes that never search Message history should ignore
+ * the false-negative-prone `updatedBackfillFromMs` while still honoring an
+ * explicit `--since` as Message-activity membership.
+ */
+export interface MessageCreatedBounds {
+  readonly sinceMs?: number;
+  readonly updatedBackfillFromMs?: number;
+  readonly fromMs?: number;
+}
+
+export function messageCreatedBounds(args: Args): MessageCreatedBounds {
+  const updatedBackfillFromMs = args.sinceUpdatedMs !== undefined
+    && typeof args.sinceUpdatedBackfillMs === "number"
+    ? args.sinceUpdatedMs - args.sinceUpdatedBackfillMs
+    : undefined;
+  const bounds = [args.sinceMs, updatedBackfillFromMs].filter((b): b is number => b !== undefined);
+  return {
+    ...(args.sinceMs === undefined ? {} : { sinceMs: args.sinceMs }),
+    ...(updatedBackfillFromMs === undefined ? {} : { updatedBackfillFromMs }),
+    ...(bounds.length === 0 ? {} : { fromMs: Math.max(...bounds) }),
+  };
+}
+
+/** Long flags and single-dash letter flags look like options; `-1`-style numbers stay values. */
+function looksLikeOption(token: string): boolean {
+  return token.startsWith("--") || /^-[a-zA-Z]/.test(token);
+}
+
+/** Reads a `--name value` or `--name=value` option and reports the consumed index. */
+function flagValue(argv: string[], index: number, name: string): { value: string; index: number } {
+  const arg = argv[index]!;
+  if (arg === name) {
+    const value = argv[index + 1];
+    if (value === undefined || looksLikeOption(value)) throw new Error(`${name} requires a value`);
+    return { value, index: index + 1 };
+  }
+  const value = arg.slice(name.length + 1);
+  if (value.length === 0) throw new Error(`${name} requires a value`);
+  return { value, index };
 }
 
 function sqliteDate(milliseconds: number): string {
@@ -46,9 +102,19 @@ const SEARCH_FIELDS: Record<PartType, readonly DocumentField[]> = {
 function selection(args: Args): SessionPredicate | undefined {
   const predicates: SessionPredicate[] = [];
   if (args.directory !== undefined) predicates.push(sessionDirectoryContains(args.directory));
+  if (args.sinceUpdatedMs !== undefined) predicates.push(sessionUpdatedRange({ from: args.sinceUpdatedMs }));
   return predicates.length === 0
     ? undefined
     : sessionPredicate((context) => context.eb.and(predicates.map((predicate) => predicate(context))));
+}
+
+/**
+ * Effective Message-created lower bound for generic content search: the exact
+ * `--since` cutoff, the `--since-updated` cutoff minus its backfill window,
+ * or the stricter of both.
+ */
+function messageCreatedFrom(args: Args): number | undefined {
+  return messageCreatedBounds(args).fromMs;
 }
 
 async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<SearchHit[]> {
@@ -64,15 +130,17 @@ async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<S
   ));
   const groups = await Effect.runPromise(Effect.scoped(
     acquireNodeOpenCodeSource({ ...source, sourceID: "cli" }).pipe(
-      Effect.flatMap(({ query }) => args.limit === 0
-        ? Effect.succeed([] as const)
-        : searchDirectSessions(query, {
+      Effect.flatMap(({ query }) => {
+        if (args.limit === 0) return Effect.succeed([] as const);
+        const messageFrom = messageCreatedFrom(args);
+        return searchDirectSessions(query, {
           witnesses,
           sessionPredicate: selection(args),
-          ...(args.sinceMs === undefined ? {} : { messageCreatedRange: { from: args.sinceMs } }),
+          ...(messageFrom === undefined ? {} : { messageCreatedRange: { from: messageFrom } }),
           evidence: !args.titleOnly && args.showSnippet,
           window: { sessions: { first: args.limit }, childrenPerSession: 1 },
-        })),
+        });
+      }),
     ),
   ));
   return groups.map(({ session, children }) => ({
@@ -116,7 +184,7 @@ function renderHuman(rows: SearchHit[], showSnippet: boolean): void {
   );
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const terms: string[] = [];
   let dbPath: string | undefined;
   let profilePath: string | undefined;
@@ -130,6 +198,8 @@ function parseArgs(argv: string[]): Args {
   let fixedStrings = false;
   let directory: string | undefined;
   let sinceMs: number | undefined;
+  let sinceUpdatedMs: number | undefined;
+  let sinceUpdatedBackfill: SinceUpdatedBackfill | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--db") {
@@ -158,6 +228,18 @@ function parseArgs(argv: string[]): Args {
       sinceMs = parseSince(v);
       continue;
     }
+    if (a === "--since-updated-backfill" || a.startsWith("--since-updated-backfill=")) {
+      const flag = flagValue(argv, i, "--since-updated-backfill");
+      i = flag.index;
+      sinceUpdatedBackfill = parseSinceUpdatedBackfill(flag.value);
+      continue;
+    }
+    if (a === "--since-updated" || a.startsWith("--since-updated=")) {
+      const flag = flagValue(argv, i, "--since-updated");
+      i = flag.index;
+      sinceUpdatedMs = parseSince(flag.value, "--since-updated");
+      continue;
+    }
     if (a === "--json") { json = true; continue; }
     if (a === "--arrow") { arrow = true; continue; }
     if (a === "--title-only") { titleOnly = true; continue; }
@@ -180,7 +262,16 @@ function parseArgs(argv: string[]): Args {
     terms.push(a);
   }
   if (arrow && json) throw new Error("--arrow cannot be combined with --json");
-  return { terms, dbPath, profilePath, limit, json, arrow, titleOnly, showSnippet, typeFilter, caseSensitive, fixedStrings, directory, sinceMs };
+  if (sinceUpdatedMs === undefined && sinceUpdatedBackfill !== undefined) {
+    throw new Error("--since-updated-backfill requires --since-updated");
+  }
+  const sinceUpdatedBackfillMs = sinceUpdatedMs === undefined
+    ? undefined
+    : sinceUpdatedBackfill ?? DEFAULT_SINCE_UPDATED_BACKFILL_MS;
+  return {
+    terms, dbPath, profilePath, limit, json, arrow, titleOnly, showSnippet, typeFilter,
+    caseSensitive, fixedStrings, directory, sinceMs, sinceUpdatedMs, sinceUpdatedBackfillMs,
+  };
 }
 
 export function printHelp(): void {
@@ -199,6 +290,14 @@ Options:
   --no-snippet     Don't show text snippet
   --type <type>    Part type to search: text, reasoning, tool (default: text)
   --since <dur>    Only Messages created at/after cutoff (24h, 7d, 30m, or ISO date)
+  --since-updated <dur-or-ISO>
+                   Only Sessions updated at/after cutoff; to stay fast, Message history
+                   is searched only from cutoff minus the backfill window, so older
+                   matches can be missed (false negatives)
+  --since-updated-backfill <dur>
+                   Backfill window behind the --since-updated cutoff (default: 21d);
+                   off, false, none, or -1 searches all Message history of the
+                   updated Sessions (exhaustive, no bounding false negatives)
   --directory <p>  Only sessions whose directory contains <p>
   -F, --fixed-strings   Treat patterns as literal strings, not regex
   -s, --case-sensitive  Match case sensitively (default: case-insensitive)
@@ -208,7 +307,9 @@ Examples:
   cotail search 'event.*v2'               # regex: "event" ... "v2"
   cotail search turso wal --json          # JSONL output
   cotail search --title-only compaction   # search titles only
-  cotail search helpers --since 7d        # only recent sessions
+  cotail search helpers --since 7d        # only content from recent Messages
+  cotail search helpers --since-updated 7d            # sessions updated this week
+  cotail search helpers --since-updated 7d --since-updated-backfill=off
   cotail search helpers --directory ~/src/compfuzor
 `);
 }

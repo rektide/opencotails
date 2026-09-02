@@ -102,6 +102,8 @@ cotail search compaction --title-only
 cotail search memory --type reasoning
 cotail search read_file --type tool
 cotail search helper --since 7d --directory ~/src/project
+cotail search helper --since-updated 7d
+cotail search helper --since-updated 7d --since-updated-backfill=off
 cotail search sqlite --json
 cotail search sqlite --arrow > hits.arrow
 ```
@@ -118,12 +120,14 @@ cotail search sqlite --arrow > hits.arrow
 | `--title-only` | Search Session titles instead of content |
 | `--no-snippet` | Omit evidence snippets |
 | `--type <type>` | Search `text`, `reasoning`, or `tool`; default `text` |
-| `--since <cutoff>` | Require Sessions updated at or after a duration or ISO date |
+| `--since <cutoff>` | Only match Messages created at or after a duration or ISO date |
+| `--since-updated <cutoff>` | Require Sessions updated at or after a duration or ISO date |
+| `--since-updated-backfill <dur>` | Message history lookback behind a `--since-updated` cutoff; default `21d` |
 | `--directory <path>` | Require the Session directory to contain `path` |
 | `-F`, `--fixed-strings` | Match literal substrings instead of regular expressions |
 | `-s`, `--case-sensitive` | Preserve case while matching |
 
-`--since` accepts values such as `30m`, `24h`, `7d`, and ISO dates. Session and directory predicates are applied before evidence is collected.
+`--since` and `--since-updated` accept values such as `30m`, `24h`, `7d`, and ISO dates (both also accept `--flag=value`). `--since` is an exact Message-created cutoff: only Messages created at or after the cutoff can match. `--since-updated` is an exact Session-updated cutoff: returned Sessions must have been updated at or after the cutoff, but Message history is only searched from the cutoff minus the backfill window (default `21d`), which can miss older matching content — a documented false-negative tradeoff for speed. Pass `--since-updated-backfill off` (or `false`, `none`, `-1`) to search all Message history of the updated Sessions instead. When both `--since` and `--since-updated` are supplied, both exact cutoffs hold and Message history is searched from the stricter lower bound: the later of the `--since` cutoff and the `--since-updated` cutoff minus its backfill. Session and directory predicates are applied before evidence is collected.
 
 ### Searchable Content
 

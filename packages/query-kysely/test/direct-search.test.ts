@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
 import { literal } from "../src/direct/match.ts";
-import { sessionDirectoryExact } from "../src/direct/session.ts";
+import { sessionDirectoryExact, sessionUpdatedRange } from "../src/direct/session.ts";
 import { documentWitness, witnessName } from "../src/direct/witness.ts";
 import { directSessionSearchQuery, searchDirectSessions } from "../src/operations/direct-search.ts";
 import { acquireNodeOpenCodeSource } from "../src/runtime/node-sqlite.ts";
@@ -223,6 +223,118 @@ test("Message-created ranges retain title matches only for Sessions with activit
 
     assert.deepEqual(active.map((group) => group.session.value.sessionID), ["ses_b"]);
     assert.deepEqual(inactive, []);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("Session-updated predicates filter returned roots without bounding Message history", async () => {
+  const fixture = await searchFixture();
+  try {
+    const request = {
+      witnesses: [alpha],
+      evidence: true,
+      window: { sessions: { first: 3 }, childrenPerSession: 3 },
+    } as const;
+    const [filtered, everything] = await Promise.all([
+      runSearch(fixture.path, {
+        ...request,
+        sessionPredicate: sessionUpdatedRange({ from: 20 }),
+      }),
+      runSearch(fixture.path, request),
+    ]);
+    // ses_a is updated at 10 and drops out even though msg_a0 still matches.
+    assert.deepEqual(filtered.map((group) => group.session.value.sessionID), ["ses_c", "ses_b"]);
+    assert.deepEqual(everything.map((group) => group.session.value.sessionID), ["ses_c", "ses_b", "ses_a"]);
+    // Without a Message-created bound the witnesses see every Message age:
+    // ses_c and ses_b still match through Messages created at 1.
+    assert.deepEqual(filtered[0]!.children.map((child) => child.document.value.excerpt), ["alpha"]);
+    assert.deepEqual(
+      filtered[1]!.children.map((child) => child.document.value.excerpt),
+      ["alpha beta", "alpha one", "alpha two"],
+    );
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("updated-time Message bounds sit behind the cutoff and can miss older matches", async () => {
+  const fixture = await searchFixture();
+  try {
+    const request = {
+      witnesses: [alpha],
+      sessionPredicate: sessionUpdatedRange({ from: 20 }),
+      evidence: true,
+      window: { sessions: { first: 3 }, childrenPerSession: 3 },
+    } as const;
+    // cutoff 20 with a 17ms backfill window: only Messages created at/after 3 exist.
+    const defaultWindow = await runSearch(fixture.path, {
+      ...request,
+      messageCreatedRange: { from: 3 },
+    });
+    assert.deepEqual(defaultWindow.map((group) => group.session.value.sessionID), ["ses_b"]);
+    assert.deepEqual(defaultWindow[0]!.children.map((child) => child.document.value.excerpt), ["alpha two"]);
+    // ses_c stays updated at 20 but its alpha match (msg_c0, created 1) sits
+    // behind the window: the documented false negative of bounded updated search.
+    // Widening the backfill to 19ms recovers it.
+    const widenedWindow = await runSearch(fixture.path, {
+      ...request,
+      messageCreatedRange: { from: 1 },
+    });
+    assert.deepEqual(widenedWindow.map((group) => group.session.value.sessionID), ["ses_c", "ses_b"]);
+    assert.deepEqual(
+      widenedWindow[1]!.children.map((child) => child.document.value.excerpt),
+      ["alpha beta", "alpha one", "alpha two"],
+    );
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("updated-time Message bounds select active Sessions before title witnesses match", async () => {
+  const fixture = await searchFixture();
+  try {
+    const title = documentWitness(witnessName("title"), (eb) => eb.and([
+      eb("field", "=", "session.title"),
+      literal(eb.ref("text"), "D"),
+    ]));
+    const request = {
+      witnesses: [title],
+      window: { sessions: { first: 3 }, childrenPerSession: 1 },
+    } as const;
+    // ses_d is updated at 30 and titled "D" but owns no Messages at all.
+    const [exhaustive, bounded] = await Promise.all([
+      runSearch(fixture.path, {
+        ...request,
+        sessionPredicate: sessionUpdatedRange({ from: 30 }),
+      }),
+      runSearch(fixture.path, {
+        ...request,
+        sessionPredicate: sessionUpdatedRange({ from: 30 }),
+        messageCreatedRange: { from: 0 },
+      }),
+    ]);
+    assert.deepEqual(exhaustive.map((group) => group.session.value.sessionID), ["ses_d"]);
+    assert.deepEqual(bounded, []);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("explicit Message cutoffs stay exact beside Session-updated predicates", async () => {
+  const fixture = await searchFixture();
+  try {
+    const result = await runSearch(fixture.path, {
+      witnesses: [alpha],
+      sessionPredicate: sessionUpdatedRange({ from: 20 }),
+      messageCreatedRange: { from: 2 },
+      evidence: true,
+      window: { sessions: { first: 3 }, childrenPerSession: 3 },
+    });
+    // The updated predicate drops ses_a; the Message cutoff drops msg_b0 and
+    // msg_c0 (created at 1), so only Messages created at/after 2 can witness.
+    assert.deepEqual(result.map((group) => group.session.value.sessionID), ["ses_b"]);
+    assert.deepEqual(result[0]!.children.map((child) => child.document.value.excerpt), ["alpha one", "alpha two"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
