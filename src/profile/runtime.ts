@@ -8,6 +8,7 @@ import { readSourceProfile } from "./files.ts";
 
 export interface RuntimeSourceSelection {
   readonly path: string;
+  readonly sourceID: string;
   readonly profile: TrustedSourceProfileFacts;
 }
 
@@ -58,6 +59,7 @@ export async function resolveRuntimeSource(
   }
   return Object.freeze({
     path: request.databasePath ?? decoded.source.path,
+    sourceID: decoded.profile_id,
     profile: Object.freeze({
       capabilities: decoded.capabilities,
       supportedMessageVariants: decoded.content.supported_message_variants,

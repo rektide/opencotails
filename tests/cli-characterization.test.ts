@@ -66,6 +66,29 @@ test("history preserves count policy and all formats", () => {
     "ID              TITLE       DIRECTORY    RECENT  TOTAL  UPDATED\nses_newest_abc  Alpha Beta  /work/alpha  1       1      1970-01-01 00:00\n1 session active since 1970-01-01 00:00 (cutoff)\n");
 });
 
+test("tail emits finite metadata-only activity in stable human and JSONL forms", () => {
+  const json = cli(["tail", "--since", "1970-01-01T00:00:03Z", "--limit", "3", "--json", "--db", database]);
+  assert.equal(json.status, 0);
+  assert.equal(json.stderr, "");
+  assert.equal(json.stdout,
+    '{"source_id":"fixture","session_id":"ses_newest_abcdefghijkl","message_id":"msg_new","message_type":"assistant","message_seq":0,"time_created":"1970-01-01T00:00:04.500Z","time_updated":"1970-01-01T00:00:04.600Z","session_title":"Alpha Beta","session_directory":"/work/alpha"}\n'
+    + '{"source_id":"fixture","session_id":"ses_split_abcdefghijkl","message_id":"msg_split_b","message_type":"user","message_seq":1,"time_created":"1970-01-01T00:00:03.500Z","time_updated":"1970-01-01T00:00:03.500Z","session_title":"Split witnesses","session_directory":"/work/alpha"}\n'
+    + '{"source_id":"fixture","session_id":"ses_other_abcdefghijkl","message_id":"msg_other","message_type":"user","message_seq":0,"time_created":"1970-01-01T00:00:03.000Z","time_updated":"1970-01-01T00:00:03.000Z","session_title":"Other","session_directory":"/work/beta"}\n');
+
+  const human = cli(["tail", "--since", "1970-01-01T00:00:04Z", "--limit", "1", "--db", database]);
+  assert.equal(human.status, 0);
+  assert.equal(human.stdout,
+    "1970-01-01T00:00:04.500Z\tassistant\tfixture\tses_newest_abcdefghijkl\tmsg_new\t0\tAlpha Beta\t/work/alpha\n");
+});
+
+test("tail rejects non-finite presentation limits", () => {
+  for (const value of ["0", "-1", "1.5", "nope"]) {
+    const result = cli(["tail", "--limit", value, "--db", database]);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /^--limit requires a positive integer\n/u);
+  }
+});
+
 test("history rejects fractional and malformed limits without truncating them", () => {
   for (const bad of ["1.5", "abc", "-1", "1e2.5"]) {
     const result = cli(["history", "--since", "1970-01-01T00:00:00Z", "--limit", bad, "--db", database]);
