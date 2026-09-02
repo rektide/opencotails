@@ -161,21 +161,27 @@ test("disabling the updated backfill keeps an explicit --since Message bound", (
 });
 
 test("--since alone keeps its exact Message-created semantics", () => {
-  assert.deepEqual(hits([...needle, "--since", MESSAGE_CUTOFF]), [
+  assert.deepEqual(hits([...needle, `--since=${MESSAGE_CUTOFF}`]), [
     FRESH,
     ["ses_old_update", "needle from the old session"],
   ]);
 });
 
-test("--title-only follows Message bounds: active Sessions first, then title witnesses", () => {
+test("--title-only ignores heuristic backfill but honors explicit Message activity", () => {
   assert.deepEqual(
     hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill=off", "--json"]),
     [["ses_stale", ""]],
   );
-  // A 12h backfill bounds Messages at D28.5: ses_stale has no Message in
-  // range, so its matching title is never considered (documented false negative).
+  // Root-local title matching needs no Message-history search, so the implicit
+  // content backfill cannot introduce a false negative.
   assert.deepEqual(
     hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "12h", "--json"]),
+    [["ses_stale", ""]],
+  );
+  // Explicit --since still means Message activity for title-only search.
+  assert.deepEqual(
+    hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF,
+      "--since", "1970-01-29T12:00:00Z", "--json"]),
     [],
   );
 });

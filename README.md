@@ -122,12 +122,12 @@ cotail search sqlite --arrow > hits.arrow
 | `--type <type>` | Search `text`, `reasoning`, or `tool`; default `text` |
 | `--since <cutoff>` | Only match Messages created at or after a duration or ISO date |
 | `--since-updated <cutoff>` | Require Sessions updated at or after a duration or ISO date |
-| `--since-updated-backfill <dur>` | Message history lookback behind a `--since-updated` cutoff; default `21d` |
+| `--since-updated-backfill <dur>` | Content Message-history lookback behind a `--since-updated` cutoff; default `21d` |
 | `--directory <path>` | Require the Session directory to contain `path` |
 | `-F`, `--fixed-strings` | Match literal substrings instead of regular expressions |
 | `-s`, `--case-sensitive` | Preserve case while matching |
 
-`--since` and `--since-updated` accept values such as `30m`, `24h`, `7d`, and ISO dates (both also accept `--flag=value`). `--since` is an exact Message-created cutoff: only Messages created at or after the cutoff can match. `--since-updated` is an exact Session-updated cutoff: returned Sessions must have been updated at or after the cutoff, but Message history is only searched from the cutoff minus the backfill window (default `21d`), which can miss older matching content — a documented false-negative tradeoff for speed. Pass `--since-updated-backfill off` (or `false`, `none`, `-1`) to search all Message history of the updated Sessions instead. When both `--since` and `--since-updated` are supplied, both exact cutoffs hold and Message history is searched from the stricter lower bound: the later of the `--since` cutoff and the `--since-updated` cutoff minus its backfill. Session and directory predicates are applied before evidence is collected.
+`--since` and `--since-updated` accept values such as `30m`, `24h`, `7d`, and ISO dates (both also accept `--flag=value`). `--since` is an exact Message-created cutoff: only Messages created at or after the cutoff can match, and title-only search requires Message activity in that range. `--since-updated` is an exact Session-updated cutoff. Content search reads Message history only from the cutoff minus the backfill window (default `21d`), which can miss older matching content - a documented false-negative tradeoff for speed. Pass `--since-updated-backfill off` (or `false`, `none`, `-1`) to search all Message history of the updated Sessions instead. Title-only search needs no Message-history scan, so it applies the exact Session cutoff directly and ignores this heuristic backfill. When both `--since` and `--since-updated` are supplied, both exact cutoffs hold; content history uses the stricter lower bound, while title search uses explicit `--since` only for activity. Session and directory predicates are applied before matching.
 
 ### Searchable Content
 

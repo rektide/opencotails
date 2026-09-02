@@ -5,12 +5,14 @@ import {
   literal,
   regex,
   searchDirectSessions,
+  searchSessionTitles,
   sessionDirectoryContains,
   sessionPredicate,
   sessionUpdatedRange,
   witnessName,
   type DocumentField,
   type SessionPredicate,
+  type SessionTitleTerm,
 } from "@opencoattails/query-kysely";
 import {
   DEFAULT_SINCE_UPDATED_BACKFILL_MS,
@@ -118,40 +120,66 @@ function messageCreatedFrom(args: Args): number | undefined {
 }
 
 async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<SearchHit[]> {
-  const fields: readonly DocumentField[] = args.titleOnly ? ["session.title"] : SEARCH_FIELDS[args.typeFilter];
-  const witnesses = args.terms.map((term, index) => documentWitness(
-    witnessName(`term-${String(index).padStart(6, "0")}`),
-    (eb) => eb.and([
-      eb("field", "in", fields),
-      args.fixedStrings
-        ? literal(eb.ref("text"), term, { case: args.caseSensitive ? "sensitive" : "insensitive" })
-        : regex(eb.ref("text"), term, { flags: args.caseSensitive ? "" : "i" }),
-    ]),
-  ));
-  const groups = await Effect.runPromise(Effect.scoped(
-    acquireNodeOpenCodeSource({ ...source, sourceID: "cli" }).pipe(
-      Effect.flatMap(({ query }) => {
-        if (args.limit === 0) return Effect.succeed([] as const);
-        const messageFrom = messageCreatedFrom(args);
-        return searchDirectSessions(query, {
-          witnesses,
-          sessionPredicate: selection(args),
-          ...(messageFrom === undefined ? {} : { messageCreatedRange: { from: messageFrom } }),
-          evidence: !args.titleOnly && args.showSnippet,
-          window: { sessions: { first: args.limit }, childrenPerSession: 1 },
+  return Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const { query } = yield* acquireNodeOpenCodeSource({ ...source, sourceID: "cli" });
+    if (args.limit === 0) return [];
+    if (args.titleOnly) {
+      const terms: readonly SessionTitleTerm[] = args.terms.map((term) => args.fixedStrings
+        ? {
+          kind: "literal",
+          value: term,
+          case: args.caseSensitive ? "sensitive" : "insensitive",
+        }
+        : {
+          kind: "regex",
+          source: term,
+          flags: args.caseSensitive ? "" : "i",
         });
-      }),
-    ),
-  ));
-  return groups.map(({ session, children }) => ({
-    id: session.value.sessionID,
-    slug: session.value.slug,
-    title: session.value.title ?? "",
-    directory: session.value.directory,
-    created: sqliteDate(session.value.createdAt),
-    updated: sqliteDate(session.value.updatedAt),
-    ...(children[0] === undefined ? {} : { snippet: children[0].document.value.excerpt }),
-  }));
+      const explicitSince = messageCreatedBounds(args).sinceMs;
+      const sessions = yield* searchSessionTitles(query, {
+        terms,
+        sessionPredicate: selection(args),
+        ...(explicitSince === undefined ? {} : { messageCreatedRange: { from: explicitSince } }),
+        limit: args.limit,
+      });
+      return sessions.map((session): SearchHit => ({
+        id: session.target.address.sessionID,
+        slug: session.value.slug,
+        title: session.value.title ?? "",
+        directory: session.value.location.directory,
+        created: sqliteDate(session.value.lifecycle.createdAt),
+        updated: sqliteDate(session.value.lifecycle.updatedAt),
+      }));
+    }
+
+    const fields = SEARCH_FIELDS[args.typeFilter];
+    const witnesses = args.terms.map((term, index) => documentWitness(
+      witnessName(`term-${String(index).padStart(6, "0")}`),
+      (eb) => eb.and([
+        eb("field", "in", fields),
+        args.fixedStrings
+          ? literal(eb.ref("text"), term, { case: args.caseSensitive ? "sensitive" : "insensitive" })
+          : regex(eb.ref("text"), term, { flags: args.caseSensitive ? "" : "i" }),
+      ]),
+    ));
+    const messageFrom = messageCreatedFrom(args);
+    const groups = yield* searchDirectSessions(query, {
+      witnesses,
+      sessionPredicate: selection(args),
+      ...(messageFrom === undefined ? {} : { messageCreatedRange: { from: messageFrom } }),
+      evidence: args.showSnippet,
+      window: { sessions: { first: args.limit }, childrenPerSession: 1 },
+    });
+    return groups.map(({ session, children }): SearchHit => ({
+      id: session.value.sessionID,
+      slug: session.value.slug,
+      title: session.value.title ?? "",
+      directory: session.value.directory,
+      created: sqliteDate(session.value.createdAt),
+      updated: sqliteDate(session.value.updatedAt),
+      ...(children[0] === undefined ? {} : { snippet: children[0].document.value.excerpt }),
+    }));
+  })));
 }
 
 function renderHuman(rows: SearchHit[], showSnippet: boolean): void {
@@ -222,10 +250,10 @@ export function parseArgs(argv: string[]): Args {
       directory = parseDirectoryArg(argv[++i]);
       continue;
     }
-    if (a === "--since") {
-      const v = argv[++i];
-      if (v === undefined) throw new Error("--since requires a value");
-      sinceMs = parseSince(v);
+    if (a === "--since" || a.startsWith("--since=")) {
+      const flag = flagValue(argv, i, "--since");
+      i = flag.index;
+      sinceMs = parseSince(flag.value);
       continue;
     }
     if (a === "--since-updated-backfill" || a.startsWith("--since-updated-backfill=")) {
@@ -291,12 +319,12 @@ Options:
   --type <type>    Part type to search: text, reasoning, tool (default: text)
   --since <dur>    Only Messages created at/after cutoff (24h, 7d, 30m, or ISO date)
   --since-updated <dur-or-ISO>
-                   Only Sessions updated at/after cutoff; to stay fast, Message history
-                   is searched only from cutoff minus the backfill window, so older
-                   matches can be missed (false negatives)
+                   Only Sessions updated at/after cutoff; content search reads Message
+                   history from cutoff minus backfill, so older matches can be missed
+                   (false negatives). Title-only search applies the exact cutoff directly
   --since-updated-backfill <dur>
                    Backfill window behind the --since-updated cutoff (default: 21d);
-                   off, false, none, or -1 searches all Message history of the
+                   off, false, none, or -1 searches all content Message history of
                    updated Sessions (exhaustive, no bounding false negatives)
   --directory <p>  Only sessions whose directory contains <p>
   -F, --fixed-strings   Treat patterns as literal strings, not regex
