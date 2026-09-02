@@ -93,6 +93,6 @@ the old plan mechanically:
   is the implemented result.
 - [Query architecture](/.design/query/design3.gpt56.md) defines the
   source-qualified Target and Observation vocabulary used by activity rows.
-- [Development ideas](/design/ideas/ideas.gpt56s.md) retains the broader rank
+- [Development ideas](/.design/ideas/ideas.gpt56s.md) retains the broader rank
   and exact-source aspirations. It should be read as roadmap material, not a
   description of the current command.

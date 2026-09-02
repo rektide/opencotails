@@ -165,7 +165,7 @@ not one command silently changing fidelity:
 - [Pushdown after action](/.design/pushdown/after-action0.gpt56s.md) supplies the
   operation-owned cost-envelope and plan-conformance discipline inherited by the
   new query, while its long-lived-host discussion remains future measurement.
-- [Development ideas](/design/ideas/ideas.gpt56s.md) matters as the broader
+- [Development ideas](/.design/ideas/ideas.gpt56s.md) matters as the broader
   activity/rank/exact-source roadmap. Its two-projection watch is a hypothesis,
   not a statement of shipped behavior.
 - [Isolated OpenCode channel research](/.test-agent/opencode-test-channel/README.md)

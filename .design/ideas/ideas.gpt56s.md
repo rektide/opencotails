@@ -2,7 +2,7 @@
 type: Exploration
 title: Cotail development ideas
 description: Open-book map of follow-on development directions, their virtues, precedence, dependencies, and agentic execution shapes.
-resource: /design/ideas/ideas.gpt56s.md
+resource: /.design/ideas/ideas.gpt56s.md
 tags: [cotail, roadmap, ideas, agents, profiles, query, compatibility, reporting, bookmarks, watch]
 status: draft
 generated: { by: model:openai/gpt-5.6-sol, at: 2026-09-01T00:00:00Z }
@@ -76,6 +76,11 @@ flowchart LR
 
   CERT --> HOST[OpenCode-hosted execution]
   CERT --> SEED[Relation-family seeding]
+  EXEC[Execution conformance] --> HOST
+  EXEC --> APP[Application runtime]
+  APP --> WATCH
+  CONTEXT[Project and lineage context] --> FILEUSE[File-use provenance]
+  CONTEXT --> REPORT
 ```
 
 The arrows identify leverage, not exclusive routes. For example, a basic
@@ -530,6 +535,112 @@ Begin with a source-backed host-interface research agent and a separate minimal
 consumer proposal. Only then assign an adapter agent. Run the standalone and
 hosted implementations through one conformance suite, with a synchronous audit
 that the hosted adapter never closes or mutates host-owned resources.
+
+## 14. One Application Runtime And Never-Silent Errors
+
+### Idea
+
+Consolidate profile/source acquisition, Effect scope, policy, tracing, expected
+error rendering, and exit status at one application composition edge. Replace
+command-local `catch` blocks that print only `.message` with one structured
+renderer for tagged operational failures while preserving clean binary stdout
+and full defects.
+
+### Value And Virtues
+
+- Makes every failure actionable instead of allowing blank stderr from tagged
+  errors without an ordinary `message`.
+- Shrinks commands into argument lowering, operation invocation, and rendering.
+- Gives long-running watch and future hosted modes one lifecycle/error model.
+- Creates a natural integration point for source catalog and access policy
+  without routing domain operations through command modules.
+
+### Precedence And Unlocks
+
+This can proceed independently after trusted runtime acquisition. It should not
+force adoption of the query registry while there is only one production
+provider. Error contracts should precede unattended watch, broad transcript
+processing, and multi-source catalog UX because those features multiply failure
+modes.
+
+It directly advances `cotail-error-rendering` and supports the application-
+runtime responsibility already identified by the scoped execution design.
+
+### Agentic Shape
+
+Run one agent over the operational error/exit-code inventory and another over a
+minimal composition root. Migrate one command as a tracer, exercise text and
+binary output failures synchronously, then use a deletion-focused agent to
+remove repeated acquisition/catch logic. Keep programmer defects visible rather
+than flattening them into generic user errors.
+
+## 15. Project, Workspace, And Lineage Context Relations
+
+### Idea
+
+Complete the broadly reusable context relation family: Project,
+ProjectDirectory, Workspace, typed parent/continuation/fork lineage edges, and
+fork boundaries. Build checked Targets and explicit dangling/cycle semantics
+rather than adding command-specific joins.
+
+### Value And Virtues
+
+- Enables accurate child trees, child usage, fork explanations, and project-
+  aware lookup.
+- Supplies the context needed to decide whether file use is local, cross-project,
+  or misplaced.
+- Gives reporting and bookmarks stable context grains rather than path strings.
+- Completes a major portion of the intended V2 logical relation map.
+
+### Precedence And Unlocks
+
+Compatibility-aware relation seeding should establish how optional layouts and
+profile capabilities affect relation availability. Canonical Session reports
+already provide the root values. This relation family unlocks child usage,
+children listing, fork point/time, cwd project-root resolution, document
+extensions, and trustworthy misplaced-session analysis.
+
+### Agentic Shape
+
+Split physical compatibility/fixtures, relation row contracts, and lineage
+semantics among background agents. Keep one synchronous corpus of cycles,
+dangling parents, fork boundaries, continuation children, workspace nullability,
+and path moves. Build child/fork products as separate tracers only after the
+relations themselves pass arbitrary-query and checked-mapping tests.
+
+## 16. Standalone Execution And Snapshot Conformance
+
+### Idea
+
+Reconcile the implemented `LogicalRead` lifecycle with its accepted snapshot and
+provenance contract. Establish a WAL snapshot before publishing provenance, run
+the lifecycle suite across supported Node versions, add redacted operation
+spans, and retain exact cleanup/read-only behavior.
+
+### Value And Virtues
+
+- Makes one-read provenance truthful for multi-statement consumers and durable
+  captures.
+- Prevents performance cleanup from weakening snapshot guarantees silently.
+- Gives standalone and future hosted providers a real common conformance suite.
+- Improves diagnosis without leaking query terms, parameters, or source content.
+
+### Precedence And Unlocks
+
+The runtime cutover removed the previous `sqlite_schema` pin because it resembled
+startup inspection, but a snapshot pin and source validation are distinct. The
+contract now needs either a neutral pin or a deliberate provenance redesign.
+Resolve this before bookmarks rely more heavily on capture observation semantics
+or watch/hosted execution grows multi-statement behavior. The Node 24/26 cleanup
+matrix can proceed in parallel.
+
+### Agentic Shape
+
+Have one agent build a concurrent WAL-writer proof, one audit provenance timing
+and snapshot vocabulary, and one run the Node version matrix. Keep the final
+contract decision synchronous because it touches the explicit no-validation
+policy. Only after the standalone contract is settled should a hosted adapter
+extract the genuinely shared execution seam.
 
 ## Candidate Development Programs
 
