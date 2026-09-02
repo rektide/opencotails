@@ -5,6 +5,7 @@ import {
 } from "@opencoattails/query-kysely";
 import {
   cutoffAt,
+  DEFAULT_SINCE,
   optionValue,
   parseDuration,
   parseSinceSpec,
@@ -30,7 +31,7 @@ export interface WatchArgs {
 }
 
 export function parseArgs(argv: string[]): WatchArgs {
-  let since = parseSinceSpec("24h");
+  let since = parseSinceSpec(DEFAULT_SINCE);
   let limit = 50;
   let intervalMs = 2_000;
   let format: ActivityOutputFormat = "human";
@@ -102,7 +103,7 @@ Observe newly visible Message metadata by polling the same bounded view as cotai
 Output reports observations, not exact causal events.
 
 Options:
-  --since <dur-or-ISO>  Moving duration or fixed Message-created cutoff (default: 24h)
+  --since <dur-or-ISO>  Moving duration or fixed Message-created cutoff (default: 31d)
   --limit <n>           Maximum Messages visible in each sample (default: 50)
   --interval <dur>      Delay between non-overlapping samples (default: 2s)
   --format <format>     Output format: human or jsonl (default: human)

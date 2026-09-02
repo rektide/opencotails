@@ -40,6 +40,9 @@ export type SinceSpec =
   | { readonly kind: "relative"; readonly durationMs: number }
   | { readonly kind: "absolute"; readonly cutoffMs: number };
 
+/** Default Message-created activity window for history, tail, and watch. */
+export const DEFAULT_SINCE = "31d";
+
 export function parseSinceSpec(since: string, option = "--since"): SinceSpec {
   const relative = durationMs(since);
   if (relative !== undefined) {

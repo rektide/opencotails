@@ -3,7 +3,7 @@ import {
   acquireNodeOpenCodeSource,
   readRecentMessageActivity,
 } from "@opencoattails/query-kysely";
-import { optionValue, parseSince } from "../args.ts";
+import { DEFAULT_SINCE, optionValue, parseSince } from "../args.ts";
 import {
   activityOutputRecord,
   humanActivityLine,
@@ -20,7 +20,7 @@ export interface TailArgs {
 }
 
 export function parseArgs(argv: string[]): TailArgs {
-  let since = "24h";
+  let since = DEFAULT_SINCE;
   let limit = 50;
   let format: ActivityOutputFormat = "human";
   let dbPath: string | undefined;
@@ -83,7 +83,7 @@ export function printHelp(): void {
 List finite recent Message activity without reading Message payloads.
 
 Options:
-  --since <dur-or-ISO>  Message-created cutoff (default: 24h)
+  --since <dur-or-ISO>  Message-created cutoff (default: 31d)
   --limit <n>           Maximum Messages returned (default: 50)
   --format <format>     Output format: human or jsonl (default: human)
   --json                Alias for --format jsonl

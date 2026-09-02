@@ -7,7 +7,7 @@ import {
   sessionUpdatedRange,
   type SessionPredicate,
 } from "@opencoattails/query-kysely";
-import { parseDirectoryArg, parseSince } from "../args.ts";
+import { DEFAULT_SINCE, parseDirectoryArg, parseSince } from "../args.ts";
 import { emitJsonl, emitTsv, renderTable, truncate } from "../format.ts";
 import type { SessionCounts } from "../opencode/types.ts";
 import { emitHistoryArrow } from "../arrow.ts";
@@ -31,7 +31,7 @@ function fmtLocal(ms: number): string {
 }
 
 function parseArgs(argv: string[]): Args {
-  let since = "24h";
+  let since = DEFAULT_SINCE;
   let limit = 0;
   let directory: string | undefined;
   let json = false;
@@ -89,10 +89,10 @@ function parseArgs(argv: string[]): Args {
 export function printHelp(): void {
   process.stdout.write(`Usage: cotail history [options]
 
-List opencode sessions active within a time window (default: last 24h).
+List opencode sessions active within a time window (default: last 31 days).
 
 Options:
-  --since <dur>      Cutoff: 24h, 7d, 30m, or an ISO date (default: 24h)
+  --since <dur>      Cutoff: 24h, 7d, 30m, or an ISO date (default: 31d)
   --limit <n>        Max sessions returned (default: unlimited)
   --directory <path> Only sessions whose directory contains <path>
   --json             Output JSONL (one object per line)
@@ -102,7 +102,7 @@ Options:
   --db <path>        Database locator override (default: path recorded in profile)
 
 Examples:
-  cotail history                      # last 24h
+  cotail history                      # last 31 days
   cotail history --since 7d           # last week
   cotail history --json               # JSONL
   cotail history --directory ~/src/foo

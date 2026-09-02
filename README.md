@@ -163,7 +163,7 @@ cotail history --arrow > history.arrow
 
 | Option | Meaning |
 |---|---|
-| `--since <cutoff>` | Activity cutoff; default `24h` |
+| `--since <cutoff>` | Activity cutoff; default `31d` |
 | `--limit <n>` | Maximum Sessions; default is unlimited |
 | `--directory <path>` | Require the Session directory to contain `path` |
 | `--json` | Emit JSON Lines |
@@ -198,7 +198,7 @@ directory. They do not read or validate Message payload JSON.
 
 | Option | Tail | Watch | Meaning |
 |---|---:|---:|---|
-| `--since <duration-or-ISO>` | Yes | Yes | Message-created cutoff; default `24h`. Watch durations move while ISO cutoffs stay fixed. |
+| `--since <duration-or-ISO>` | Yes | Yes | Message-created cutoff; default `31d`. Watch durations move while ISO cutoffs stay fixed. |
 | `--limit <n>` | Yes | Yes | Positive finite result/sample size; default `50` |
 | `--interval <duration>` | No | Yes | Delay between non-overlapping samples; default `2s` |
 | `--format human\|jsonl` | Yes | Yes | Explicit output format; default `human` |
