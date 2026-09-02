@@ -161,13 +161,16 @@ test("matches generic title witnesses across literal, regex, case, predicate, an
         specialized.map((session) => session.target.address.sessionID),
         generic.map((group) => group.session.target.address.sessionID),
       );
+      assert.deepEqual(
+        specialized.map((session) => session.value),
+        generic.map((group) => group.session.value),
+      );
     }
 
-    const reports = await runSpecialized(fixture.path, cases[0]!);
-    assert.deepEqual(reports.map((session) => session.target.address.sessionID), ["ses_e", "ses_a"]);
-    assert.equal(reports[0]!.value.location.directory, "/e");
-    assert.equal(reports[0]!.value.lifecycle.updatedAt, 30);
-    assert.equal(reports[0]!.read.readScopeID.length > 0, true);
+    const summaries = await runSpecialized(fixture.path, cases[0]!);
+    assert.deepEqual(summaries.map((session) => session.target.address.sessionID), ["ses_e", "ses_a"]);
+    assert.equal(summaries[0]!.value.directory, "/e");
+    assert.equal(summaries[0]!.value.updatedAt, 30);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -252,6 +255,11 @@ test("ignores malformed payloads in unrelated active Sessions", async () => {
     .run("msg_match", "ses_match", JSON.stringify(validMessageData("user", "msg_match", 10)));
   fixture.database.prepare("insert into session_message values (?, ?, 'user', 0, 10, 10, ?)")
     .run("msg_noise", "ses_noise", "{malformed");
+  fixture.database.exec(`
+    update session_v2
+    set cost = 'not-a-number', tokens_input = 'not-a-number', parent_id = 123
+    where id = 'ses_match'
+  `);
   fixture.database.prepare("vacuum into ?").run(path);
   fixture.database.close();
   try {

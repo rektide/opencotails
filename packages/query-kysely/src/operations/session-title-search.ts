@@ -3,18 +3,16 @@ import { sql, type Expression, type ExpressionBuilder, type SqlBool } from "kyse
 import type { ReadonlyQueryCreator } from "kysely/readonly";
 import { literal, regex, type LiteralOptions, type RegexOptions } from "../direct/match.ts";
 import type { SessionPredicate } from "../direct/session.ts";
-import type { SessionReportObservation } from "../domain/session-report.ts";
+import { sessionAddress, target, type SessionAddress } from "../domain/address.ts";
+import { sessionID } from "../domain/identifier.ts";
+import type { Located, SessionSummary } from "../domain/results.ts";
+import { RowDecodeError } from "../domain/map-address.ts";
 import type { LogicalQueryShape, QueryContext, QueryError } from "../query/logical-query.ts";
 import type {
   CotailSessionMessageRelations,
-  CotailSessionRelations,
+  SessionRelation,
 } from "../relations/schema.ts";
-import {
-  decodeSessionReport,
-  sessionReportColumns,
-  SessionReportDecodeError,
-  type SessionReportRow,
-} from "./session-report.ts";
+import { sessionContext } from "./session-context.ts";
 
 export type SessionTitleTerm =
   | {
@@ -40,7 +38,22 @@ export interface SessionTitleSearchRequest {
   readonly limit: number;
 }
 
-export type SessionTitleSearchError = QueryError | SessionReportDecodeError;
+export type SessionTitleSearchError = QueryError | RowDecodeError;
+
+const sessionSummaryColumns = [
+  "cotail_session.sessionID",
+  "cotail_session.projectID",
+  "cotail_session.slug",
+  "cotail_session.title",
+  "cotail_session.directory",
+  "cotail_session.createdAt",
+  "cotail_session.updatedAt",
+] as const satisfies readonly `cotail_session.${Extract<keyof SessionRelation, string>}`[];
+
+type SessionTitleRow = Pick<
+  SessionRelation,
+  "sessionID" | "projectID" | "slug" | "title" | "directory" | "createdAt" | "updatedAt"
+>;
 
 function validateTerm(term: SessionTitleTerm, index: number): void {
   if (term === null || typeof term !== "object") {
@@ -92,20 +105,6 @@ function matchTitle(title: Expression<string>, term: SessionTitleTerm): Expressi
     : regex(title, term.source, { flags: term.flags });
 }
 
-function sessionPredicateContext<DB extends CotailSessionRelations>(
-  eb: ExpressionBuilder<DB, "cotail_session">,
-) {
-  return {
-    eb,
-    session: {
-      sessionID: eb.ref("cotail_session.sessionID"),
-      projectID: eb.ref("cotail_session.projectID"),
-      directory: eb.ref("cotail_session.directory"),
-      updatedAt: eb.ref("cotail_session.updatedAt"),
-    },
-  };
-}
-
 function buildSessionTitleSearchQuery(
   db: ReadonlyQueryCreator<CotailSessionMessageRelations>,
   request: SessionTitleSearchRequest,
@@ -115,9 +114,9 @@ function buildSessionTitleSearchQuery(
 ) {
   return db
     .with("candidate_sessions", (qb) => {
-      let candidates = qb.selectFrom("cotail_session").select(sessionReportColumns);
+      let candidates = qb.selectFrom("cotail_session").select(sessionSummaryColumns);
       if (request.sessionPredicate !== undefined) {
-        candidates = candidates.where((eb) => request.sessionPredicate!(sessionPredicateContext(eb)));
+        candidates = candidates.where((eb) => request.sessionPredicate!(sessionContext(eb)));
       }
       if (activity !== undefined) candidates = candidates.where(activity);
       return candidates;
@@ -167,17 +166,29 @@ export function sessionTitleSearchQuery(
 export function searchSessionTitles(
   query: LogicalQueryShape,
   request: SessionTitleSearchRequest,
-): Effect.Effect<readonly SessionReportObservation[], SessionTitleSearchError> {
+): Effect.Effect<readonly Located<SessionAddress, SessionSummary>[], SessionTitleSearchError> {
   validateRequest(request);
   return Effect.scoped(query.openRead.pipe(Effect.flatMap((read) => read.all((context) =>
     sessionTitleSearchQuery(context, request)).pipe(
-    Effect.flatMap((rows) => {
-      try {
-        return Effect.succeed((rows as readonly SessionReportRow[]).map((row) =>
-          decodeSessionReport(row, read.source, read.provenance)));
-      } catch (cause) {
-        return cause instanceof SessionReportDecodeError ? Effect.fail(cause) : Effect.die(cause);
-      }
-    }),
+    Effect.flatMap((rows) => Effect.try({
+      try: () => (rows as readonly SessionTitleRow[]).map((row) => {
+        const sid = sessionID(row.sessionID);
+        return Object.freeze({
+          target: target(read.source, sessionAddress(sid)),
+          value: Object.freeze({
+            sessionID: row.sessionID,
+            projectID: row.projectID,
+            slug: row.slug,
+            title: row.title,
+            directory: row.directory,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          }),
+        });
+      }),
+      catch: (cause) => cause instanceof RowDecodeError
+        ? cause
+        : new RowDecodeError(cause instanceof Error ? cause.message : String(cause), null),
+    })),
   ))));
 }

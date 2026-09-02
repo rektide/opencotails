@@ -1,10 +1,10 @@
 import type { ExpressionBuilder } from "kysely";
 import type { SessionPredicate, SessionPredicateContext } from "../direct/session.ts";
-import type { CotailRelations } from "../relations/schema.ts";
+import type { CotailRelations, CotailSessionRelations } from "../relations/schema.ts";
 
-export function sessionContext(
-  eb: ExpressionBuilder<CotailRelations, "cotail_session">,
-): SessionPredicateContext<CotailRelations, "cotail_session"> {
+export function sessionContext<DB extends CotailSessionRelations>(
+  eb: ExpressionBuilder<DB, "cotail_session">,
+): SessionPredicateContext<DB, "cotail_session"> {
   return {
     eb,
     session: {

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import test, { after } from "node:test";
 import { messageCreatedBounds, parseArgs } from "../src/commands/search.ts";
 import {
@@ -55,29 +55,43 @@ async function createSinceUpdatedDatabase(path: string): Promise<void> {
   }
 }
 
-const directory = mkdtempSync(join(tmpdir(), "cotail-since-updated-"));
+const directory = await mkdtemp(join(tmpdir(), "cotail-since-updated-"));
 const database = join(directory, "fixture.db");
 await createSinceUpdatedDatabase(database);
 const profile = join(directory, "fixture-profile.json");
 await writeCliSourceProfile(database, profile);
-after(() => rmSync(directory, { recursive: true, force: true }));
+after(() => rm(directory, { recursive: true, force: true }));
 
-function cli(args: readonly string[]) {
-  return spawnSync(process.execPath, ["src/cli.ts", ...args, "--profile", profile], {
-    cwd: new URL("..", import.meta.url),
-    encoding: "utf8",
-    env: { ...process.env, TZ: "UTC" },
+interface CliResult {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+function invokeCli(args: readonly string[]): Promise<CliResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["src/cli.ts", ...args], {
+      cwd: new URL("..", import.meta.url),
+      env: { ...process.env, TZ: "UTC" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
+}
+
+function cli(args: readonly string[]): Promise<CliResult> {
+  return invokeCli([...args, "--profile", profile]);
 }
 
 // Parse errors exit before the profile is consulted, so end-of-argv cases run
 // without the appended --profile that would otherwise become the flag value.
-function cliWithoutProfile(args: readonly string[]) {
-  return spawnSync(process.execPath, ["src/cli.ts", ...args], {
-    cwd: new URL("..", import.meta.url),
-    encoding: "utf8",
-    env: { ...process.env, TZ: "UTC" },
-  });
+function cliWithoutProfile(args: readonly string[]): Promise<CliResult> {
+  return invokeCli(args);
 }
 
 interface HitRow {
@@ -85,8 +99,8 @@ interface HitRow {
   readonly snippet?: string;
 }
 
-function hits(args: readonly string[]): readonly (readonly [string, string])[] {
-  const result = cli(args);
+async function hits(args: readonly string[]): Promise<readonly (readonly [string, string])[]> {
+  const result = await cli(args);
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.split("\n").filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as HitRow)
@@ -97,96 +111,96 @@ const needle = ["search", "needle", "--json"] as const;
 const FRESH: readonly [string, string] = ["ses_fresh", "needle fresh drop"];
 const STALE: readonly [string, string] = ["ses_stale", "needle from the distant past"];
 
-test("--since-updated filters Sessions exactly and, disabled backfill, searches all history", () => {
-  assert.deepEqual(hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "off"]), [FRESH, STALE]);
+test("--since-updated filters Sessions exactly and, disabled backfill, searches all history", async () => {
+  assert.deepEqual(await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "off"]), [FRESH, STALE]);
   // ses_old_update carries fresh needle content but was not updated in range.
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "none"]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "none"]),
     [FRESH, STALE],
   );
 });
 
-test("default 21d backfill bounds Message history and can miss older matches", () => {
+test("default 21d backfill bounds Message history and can miss older matches", async () => {
   // Cutoff D29 minus 21d hides ses_stale's D0 needle even though the Session
   // itself is updated in range: the documented false negative.
-  assert.deepEqual(hits([...needle, "--since-updated", UPDATED_CUTOFF]), [FRESH]);
+  assert.deepEqual(await hits([...needle, "--since-updated", UPDATED_CUTOFF]), [FRESH]);
 });
 
-test("custom backfill windows widen the Message history search", () => {
+test("custom backfill windows widen the Message history search", async () => {
   assert.deepEqual(
-    hits([...needle, `--since-updated=${UPDATED_CUTOFF}`, "--since-updated-backfill=30d"]),
+    await hits([...needle, `--since-updated=${UPDATED_CUTOFF}`, "--since-updated-backfill=30d"]),
     [FRESH, STALE],
   );
   // 29d reaches exactly to D0; shorter windows reproduce the false negative.
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "28d"]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "28d"]),
     [FRESH],
   );
 });
 
-test("all four disable spellings turn off the Message bound via = and space forms", () => {
+test("all four disable spellings turn off the Message bound via = and space forms", async () => {
   for (const value of ["off", "false", "none", "-1"]) {
     assert.deepEqual(
-      hits([...needle, "--since-updated", UPDATED_CUTOFF, `--since-updated-backfill=${value}`]),
+      await hits([...needle, "--since-updated", UPDATED_CUTOFF, `--since-updated-backfill=${value}`]),
       [FRESH, STALE],
       value,
     );
   }
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "false"]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "false"]),
     [FRESH, STALE],
   );
   // The negative-number disable spelling survives the option-looking-value rule.
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "-1"]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "-1"]),
     [FRESH, STALE],
   );
 });
 
-test("combined --since and --since-updated enforce both cutoffs with the stricter Message bound", () => {
+test("combined --since and --since-updated enforce both cutoffs with the stricter Message bound", async () => {
   // Backfill 30d bounds Messages at D-1, but --since D26 wins as the stricter
   // bound: ses_stale's D0 needle stays hidden; ses_old_update would match the
   // Message cutoff yet fails the exact updated cutoff.
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "30d", "--since", MESSAGE_CUTOFF]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "30d", "--since", MESSAGE_CUTOFF]),
     [FRESH],
   );
 });
 
-test("disabling the updated backfill keeps an explicit --since Message bound", () => {
+test("disabling the updated backfill keeps an explicit --since Message bound", async () => {
   assert.deepEqual(
-    hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill=off", "--since", MESSAGE_CUTOFF]),
+    await hits([...needle, "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill=off", "--since", MESSAGE_CUTOFF]),
     [FRESH],
   );
 });
 
-test("--since alone keeps its exact Message-created semantics", () => {
-  assert.deepEqual(hits([...needle, `--since=${MESSAGE_CUTOFF}`]), [
+test("--since alone keeps its exact Message-created semantics", async () => {
+  assert.deepEqual(await hits([...needle, `--since=${MESSAGE_CUTOFF}`]), [
     FRESH,
     ["ses_old_update", "needle from the old session"],
   ]);
 });
 
-test("--title-only ignores heuristic backfill but honors explicit Message activity", () => {
+test("--title-only ignores heuristic backfill but honors explicit Message activity", async () => {
   assert.deepEqual(
-    hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill=off", "--json"]),
+    await hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill=off", "--json"]),
     [["ses_stale", ""]],
   );
   // Root-local title matching needs no Message-history search, so the implicit
   // content backfill cannot introduce a false negative.
   assert.deepEqual(
-    hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "12h", "--json"]),
+    await hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF, "--since-updated-backfill", "12h", "--json"]),
     [["ses_stale", ""]],
   );
   // Explicit --since still means Message activity for title-only search.
   assert.deepEqual(
-    hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF,
+    await hits(["search", "Stale", "--title-only", "--since-updated", UPDATED_CUTOFF,
       "--since", "1970-01-29T12:00:00Z", "--json"]),
     [],
   );
 });
 
-test("backfill and time values reject malformed arguments with exit status 2", () => {
+test("backfill and time values reject malformed arguments with exit status 2", async () => {
   const cases: readonly (readonly [readonly string[], RegExp])[] = [
     [[...needle, "--since-updated-backfill", "5d"], /^--since-updated-backfill requires --since-updated\n/],
     [[...needle, "--since-updated-backfill=5d"], /^--since-updated-backfill requires --since-updated\n/],
@@ -198,7 +212,7 @@ test("backfill and time values reject malformed arguments with exit status 2", (
     [[...needle, "--since-updated", "7d", "--since-updated-backfill="], /^--since-updated-backfill requires a value\n/],
   ];
   for (const [args, message] of cases) {
-    const result = cli(args);
+    const result = await cli(args);
     assert.equal(result.status, 2, JSON.stringify({ args, stderr: result.stderr }));
     assert.match(result.stderr, message);
   }
@@ -208,7 +222,7 @@ test("backfill and time values reject malformed arguments with exit status 2", (
     [[...needle, "--since-updated", "7d", "--since-updated-backfill", "--json"], /^--since-updated-backfill requires a value\n/],
     [[...needle, "--since-updated", "7d", "--since-updated-backfill", "-F"], /^--since-updated-backfill requires a value\n/],
   ] as const) {
-    const result = cli(args);
+    const result = await cli(args);
     assert.equal(result.status, 2, JSON.stringify({ args, stderr: result.stderr }));
     assert.match(result.stderr, message);
   }
@@ -217,13 +231,13 @@ test("backfill and time values reject malformed arguments with exit status 2", (
     [[...needle, "--since-updated"], /^--since-updated requires a value\n/],
     [[...needle, "--since-updated", "7d", "--since-updated-backfill"], /^--since-updated-backfill requires a value\n/],
   ] as const) {
-    const result = cliWithoutProfile(args);
+    const result = await cliWithoutProfile(args);
     assert.equal(result.status, 2, JSON.stringify({ args, stderr: result.stderr }));
     assert.match(result.stderr, message);
   }
   // The rejection is order-independent: backfill before its --since-updated.
   assert.deepEqual(
-    hits([...needle, "--since-updated-backfill=5d", "--since-updated", UPDATED_CUTOFF]),
+    await hits([...needle, "--since-updated-backfill=5d", "--since-updated", UPDATED_CUTOFF]),
     [FRESH],
   );
 });
@@ -264,8 +278,8 @@ test("parsed bounds keep explicit --since distinct from the updated-backfill heu
   assert.deepEqual(Object.keys(messageCreatedBounds(bare)), []);
 });
 
-test("search help documents the backfill false-negative tradeoff", () => {
-  const result = cli(["search", "--help"]);
+test("search help documents the backfill false-negative tradeoff", async () => {
+  const result = await cli(["search", "--help"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /--since-updated-backfill <dur>/);
   assert.match(result.stdout, /false negative/);

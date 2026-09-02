@@ -110,15 +110,6 @@ function selection(args: Args): SessionPredicate | undefined {
     : sessionPredicate((context) => context.eb.and(predicates.map((predicate) => predicate(context))));
 }
 
-/**
- * Effective Message-created lower bound for generic content search: the exact
- * `--since` cutoff, the `--since-updated` cutoff minus its backfill window,
- * or the stricter of both.
- */
-function messageCreatedFrom(args: Args): number | undefined {
-  return messageCreatedBounds(args).fromMs;
-}
-
 async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<SearchHit[]> {
   return Effect.runPromise(Effect.scoped(Effect.gen(function*() {
     const { query } = yield* acquireNodeOpenCodeSource({ ...source, sourceID: "cli" });
@@ -146,9 +137,9 @@ async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<S
         id: session.target.address.sessionID,
         slug: session.value.slug,
         title: session.value.title ?? "",
-        directory: session.value.location.directory,
-        created: sqliteDate(session.value.lifecycle.createdAt),
-        updated: sqliteDate(session.value.lifecycle.updatedAt),
+        directory: session.value.directory,
+        created: sqliteDate(session.value.createdAt),
+        updated: sqliteDate(session.value.updatedAt),
       }));
     }
 
@@ -162,7 +153,7 @@ async function searchRows(source: RuntimeSourceSelection, args: Args): Promise<S
           : regex(eb.ref("text"), term, { flags: args.caseSensitive ? "" : "i" }),
       ]),
     ));
-    const messageFrom = messageCreatedFrom(args);
+    const messageFrom = messageCreatedBounds(args).fromMs;
     const groups = yield* searchDirectSessions(query, {
       witnesses,
       sessionPredicate: selection(args),
