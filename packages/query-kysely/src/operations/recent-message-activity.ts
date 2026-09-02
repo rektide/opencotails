@@ -12,7 +12,7 @@ import { RowDecodeError } from "../domain/map-address.ts";
 import type { LogicalQueryShape, QueryContext, QueryError } from "../query/logical-query.ts";
 import type {
   CotailSessionMessageRelations,
-  MessageRelation,
+  MessageMetadataRelation,
   SessionRelation,
 } from "../relations/schema.ts";
 
@@ -39,7 +39,7 @@ export type MessageActivityObservation = Observation<MessageAddress, MessageActi
 export type RecentMessageActivityError = QueryError | RowDecodeError;
 
 type ActivityRow = Pick<
-  MessageRelation,
+  MessageMetadataRelation,
   "sessionID" | "messageID" | "messageType" | "messageSeq" | "createdAt" | "updatedAt"
 > & Pick<SessionRelation, "title" | "directory">;
 
@@ -51,7 +51,14 @@ function safeInteger(name: string, value: unknown, minimum = 0): number {
 }
 
 function text(name: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof value !== "string") {
+    throw new RowDecodeError(`${name} must be text`, null);
+  }
+  return value;
+}
+
+function nonEmptyText(name: string, value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
     throw new RowDecodeError(`${name} must be non-empty text`, null);
   }
   return value;
@@ -118,17 +125,17 @@ export function readRecentMessageActivity(
     read.all((context) => recentMessageActivityQuery(context, request)).pipe(
       Effect.flatMap((rows) => Effect.try({
         try: () => (rows as readonly ActivityRow[]).map((row) => {
-          const session = sessionAddress(sessionID(text("sessionID", row.sessionID)));
+          const session = sessionAddress(sessionID(nonEmptyText("sessionID", row.sessionID)));
           return observation({
-            target: target(read.source, messageAddress(session, messageID(text("messageID", row.messageID)))),
+            target: target(read.source, messageAddress(session, messageID(nonEmptyText("messageID", row.messageID)))),
             value: Object.freeze({
-              messageType: text("messageType", row.messageType),
+              messageType: nonEmptyText("messageType", row.messageType),
               messageSeq: safeInteger("messageSeq", row.messageSeq),
               createdAt: safeInteger("createdAt", row.createdAt),
               updatedAt: safeInteger("updatedAt", row.updatedAt),
               session: Object.freeze({
                 title: nullableText("session title", row.title),
-                directory: text("session directory", row.directory),
+                directory: nonEmptyText("session directory", row.directory),
               }),
             }),
             read: read.provenance,

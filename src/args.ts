@@ -13,6 +13,24 @@ export function parseDirectoryArg(value: string | undefined): string {
   return value;
 }
 
+export function optionValue(
+  argv: readonly string[],
+  index: number,
+  name: string,
+): { readonly value: string; readonly index: number } {
+  const argument = argv[index]!;
+  if (argument === name) {
+    const value = argv[index + 1];
+    if (value === undefined || value.length === 0 || value.startsWith("--")) {
+      throw new Error(`${name} requires a value`);
+    }
+    return { value, index: index + 1 };
+  }
+  const value = argument.slice(name.length + 1);
+  if (value.length === 0) throw new Error(`${name} requires a value`);
+  return { value, index };
+}
+
 function durationMs(value: string): number | undefined {
   const m = /^(\d+)([smhdw])$/.exec(value);
   return m === null ? undefined : Number(m[1]) * UNITS[m[2]]!;

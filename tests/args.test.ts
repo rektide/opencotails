@@ -4,6 +4,7 @@ import {
   DEFAULT_SINCE_UPDATED_BACKFILL_MS,
   cutoffAt,
   isSinceUpdatedBackfillDisableValue,
+  optionValue,
   parseDuration,
   parseSince,
   parseSinceSpec,
@@ -41,6 +42,12 @@ test("parseDuration provides checked watch intervals", () => {
   assert.equal(parseDuration("2s", "--interval"), 2_000);
   assert.throws(() => parseDuration("1.5s", "--interval"), /--interval: unrecognized duration/);
   assert.throws(() => parseDuration("99999999999999999999d", "--interval"), /out of range/);
+});
+
+test("optionValue handles space/equal forms without consuming another flag", () => {
+  assert.deepEqual(optionValue(["--since", "2h"], 0, "--since"), { value: "2h", index: 1 });
+  assert.deepEqual(optionValue(["--since=2h"], 0, "--since"), { value: "2h", index: 0 });
+  assert.throws(() => optionValue(["--since", "--json"], 0, "--since"), /requires a value/u);
 });
 
 test("parseSinceUpdatedBackfill parses durations, never cutoff timestamps", () => {

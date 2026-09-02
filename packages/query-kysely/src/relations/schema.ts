@@ -45,6 +45,9 @@ export interface MessageRelation {
   readonly sourceJSON: string;
 }
 
+/** Message columns available without selecting the physical payload. */
+export type MessageMetadataRelation = Omit<MessageRelation, "sourceJSON">;
+
 export interface UserMessageRelation {
   readonly sessionID: string;
   readonly messageID: string;
@@ -232,5 +235,5 @@ export interface CotailSessionRelations {
 
 /** Session roots plus raw Message metadata, without payload-derived relations. */
 export interface CotailSessionMessageRelations extends CotailSessionRelations {
-  readonly cotail_message: MessageRelation;
+  readonly cotail_message: MessageMetadataRelation;
 }

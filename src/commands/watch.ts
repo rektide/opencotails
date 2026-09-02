@@ -5,6 +5,7 @@ import {
 } from "@opencoattails/query-kysely";
 import {
   cutoffAt,
+  optionValue,
   parseDuration,
   parseSinceSpec,
   type SinceSpec,
@@ -26,20 +27,6 @@ export interface WatchArgs {
   readonly once: boolean;
   readonly dbPath?: string;
   readonly profilePath?: string;
-}
-
-function optionValue(argv: string[], index: number, name: string): { readonly value: string; readonly index: number } {
-  const argument = argv[index]!;
-  if (argument === name) {
-    const value = argv[index + 1];
-    if (value === undefined || value.length === 0 || value.startsWith("--")) {
-      throw new Error(`${name} requires a value`);
-    }
-    return { value, index: index + 1 };
-  }
-  const value = argument.slice(name.length + 1);
-  if (value.length === 0) throw new Error(`${name} requires a value`);
-  return { value, index };
 }
 
 export function parseArgs(argv: string[]): WatchArgs {

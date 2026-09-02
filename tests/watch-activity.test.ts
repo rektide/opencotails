@@ -30,9 +30,9 @@ function activity(messageID: string, createdAt: number): MessageActivityObservat
 
 test("emits deterministic initial and subsequent observations without duplicates", async () => {
   const samples = [
-    [activity("msg_b", 20), activity("msg_a", 10)],
-    [activity("msg_c", 30), activity("msg_b", 20), activity("msg_a", 10)],
-    [activity("msg_c", 30), activity("msg_b", 20)],
+    [activity("msg_b", 10), activity("msg_a", 10)],
+    [activity("msg_c", 30), activity("msg_b", 10), activity("msg_a", 10)],
+    [activity("msg_c", 30), activity("msg_b", 10)],
   ];
   const emitted: WatchActivityObservation[] = [];
   let wakes = 0;

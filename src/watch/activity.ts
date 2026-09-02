@@ -28,11 +28,15 @@ function identity(activity: MessageActivityObservation): string {
   return `${activity.target.source.sourceID}\u0000${activity.target.address.messageID}`;
 }
 
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function ascendingActivity(a: MessageActivityObservation, b: MessageActivityObservation): number {
   return a.value.createdAt - b.value.createdAt
-    || a.target.address.messageID.localeCompare(b.target.address.messageID)
-    || a.target.source.sourceID.localeCompare(b.target.source.sourceID)
-    || a.target.address.session.sessionID.localeCompare(b.target.address.session.sessionID);
+    || compareText(a.target.address.messageID, b.target.address.messageID)
+    || compareText(a.target.source.sourceID, b.target.source.sourceID)
+    || compareText(a.target.address.session.sessionID, b.target.address.session.sessionID);
 }
 
 /**

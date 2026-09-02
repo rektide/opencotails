@@ -120,7 +120,7 @@ test("uses the Message-created index without scans, payload worlds, or validatio
     const details = plan.map(({ detail }) => detail);
 
     assert.match(compiled.sql, /from "session_message" where "time_created" >= \?/u);
-    assert.doesNotMatch(compiled.sql, /cotail_validated_message|cotail_validate_message|cotail_document|json_/u);
+    assert.doesNotMatch(compiled.sql, /cotail_validated_message|cotail_validate_message|cotail_document|json_|"data"|select \*/u);
     assert.equal(details.some((detail) => /SCAN session_message/u.test(detail)), false, details.join("\n"));
     assert.equal(details.some((detail) => /SEARCH session_message .*time_created/u.test(detail)), true,
       details.join("\n"));
@@ -159,6 +159,28 @@ test("rejects malformed physical metadata at the operation boundary", async () =
         limit: 1,
       }))),
     )), /messageType must be non-empty text/u);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("preserves blank nullable Session titles like the canonical Session decoder", async () => {
+  const fixture = await activityFixture();
+  try {
+    const writer = new DatabaseSync(fixture.path);
+    writer.exec("update session_v2 set title = '' where id = 'ses_a'");
+    writer.close();
+    const rows = await Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({
+        path: fixture.path,
+        sourceID: "fixture-source",
+        profile: trustedSourceProfileFacts,
+      }).pipe(Effect.flatMap(({ query }) => readRecentMessageActivity(query, {
+        messageCreatedRange: { from: 20, to: 21 },
+        limit: 2,
+      }))),
+    ));
+    assert.equal(rows.find((row) => row.target.address.messageID === "msg_tie_a")!.value.session.title, "");
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

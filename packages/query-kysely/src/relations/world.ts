@@ -71,7 +71,9 @@ export function logicalRootWorld(
   const range = scope.messageCreatedRange;
   const seeded = physical
     .with("cotail_scoped_message", (db) => {
-      let messages = db.selectFrom("session_message").selectAll();
+      let messages = db.selectFrom("session_message").select([
+        "id", "session_id", "type", "seq", "time_created", "time_updated",
+      ]);
       if (range.from !== undefined) messages = messages.where("time_created", ">=", range.from);
       if (range.to !== undefined) messages = messages.where("time_created", "<", range.to);
       return messages;
@@ -79,7 +81,7 @@ export function logicalRootWorld(
     .with("cotail_session", (db) => db.selectFrom("session_v2").select(rootSessionColumns))
     .with("cotail_message", (db) => db.selectFrom("cotail_scoped_message").select([
       "session_id as sessionID", "id as messageID", "type as messageType", "seq as messageSeq",
-      "time_created as createdAt", "time_updated as updatedAt", "data as sourceJSON",
+      "time_created as createdAt", "time_updated as updatedAt",
     ]));
   return seeded as unknown as ReadonlyQueryCreator<CotailSessionMessageRelations>;
 }
