@@ -7,6 +7,8 @@ import type {
   CompactionRelation,
   ContentRelation,
   CotailRelations,
+  CotailSessionMessageRelations,
+  CotailSessionRelations,
   DocumentRelation,
   ShellExecutionRelation,
   ToolCallRelation,
@@ -19,6 +21,67 @@ export interface LogicalWorldScope {
     readonly from?: number;
     readonly to?: number;
   };
+}
+
+export interface LogicalRootMessageScope {
+  readonly messageCreatedRange: {
+    readonly from?: number;
+    readonly to?: number;
+  };
+}
+
+export interface LogicalRootWorld {
+  (): ReadonlyQueryCreator<CotailSessionRelations>;
+  (scope: LogicalRootMessageScope): ReadonlyQueryCreator<CotailSessionMessageRelations>;
+}
+
+const rootSessionColumns = [
+  "id as sessionID", "project_id as projectID", "workspace_id as workspaceID",
+  "parent_id as parentID", "fork_session_id as forkSessionID", "fork_boundary as forkBoundary",
+  "slug", "directory", "path", "title", "version", "share_url as shareURL",
+  "summary_additions as summaryAdditions", "summary_deletions as summaryDeletions",
+  "summary_files as summaryFiles", "summary_diffs as summaryDiffsJSON", "metadata as metadataJSON",
+  "cost", "tokens_input as tokensInput", "tokens_output as tokensOutput",
+  "tokens_reasoning as tokensReasoning", "tokens_cache_read as tokensCacheRead",
+  "tokens_cache_write as tokensCacheWrite", "revert as revertJSON", "permission as permissionJSON",
+  "agent", "model", "time_created as createdAt", "time_updated as updatedAt",
+  "time_compacting as compactingAt", "time_archived as archivedAt", "time_suspended as suspendedAt",
+] as const;
+
+/**
+ * Seeds only root-local relations. Message metadata is absent unless a scoped
+ * activity lookup is explicitly requested; payload-derived relations are never
+ * part of this world.
+ */
+export function logicalRootWorld(
+  physical: Kysely<PhysicalOpenCodeV2>,
+): ReadonlyQueryCreator<CotailSessionRelations>;
+export function logicalRootWorld(
+  physical: Kysely<PhysicalOpenCodeV2>,
+  scope: LogicalRootMessageScope,
+): ReadonlyQueryCreator<CotailSessionMessageRelations>;
+export function logicalRootWorld(
+  physical: Kysely<PhysicalOpenCodeV2>,
+  scope?: LogicalRootMessageScope,
+): ReadonlyQueryCreator<CotailSessionRelations> | ReadonlyQueryCreator<CotailSessionMessageRelations> {
+  if (scope === undefined) {
+    return (physical.with("cotail_session", (db) => db.selectFrom("session_v2").select(rootSessionColumns))) as unknown as ReadonlyQueryCreator<CotailSessionRelations>;
+  }
+
+  const range = scope.messageCreatedRange;
+  const seeded = physical
+    .with("cotail_scoped_message", (db) => {
+      let messages = db.selectFrom("session_message").selectAll();
+      if (range.from !== undefined) messages = messages.where("time_created", ">=", range.from);
+      if (range.to !== undefined) messages = messages.where("time_created", "<", range.to);
+      return messages;
+    })
+    .with("cotail_session", (db) => db.selectFrom("session_v2").select(rootSessionColumns))
+    .with("cotail_message", (db) => db.selectFrom("cotail_scoped_message").select([
+      "session_id as sessionID", "id as messageID", "type as messageType", "seq as messageSeq",
+      "time_created as createdAt", "time_updated as updatedAt", "data as sourceJSON",
+    ]));
+  return seeded as unknown as ReadonlyQueryCreator<CotailSessionMessageRelations>;
 }
 
 export function logicalWorld(

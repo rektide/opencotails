@@ -224,3 +224,13 @@ export interface CotailRelations {
   readonly cotail_compaction: CompactionRelation;
   readonly cotail_document: DocumentRelation;
 }
+
+/** Logical relations available to operations that only inspect Session roots. */
+export interface CotailSessionRelations {
+  readonly cotail_session: SessionRelation;
+}
+
+/** Session roots plus raw Message metadata, without payload-derived relations. */
+export interface CotailSessionMessageRelations extends CotailSessionRelations {
+  readonly cotail_message: MessageRelation;
+}
