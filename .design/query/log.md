@@ -1,5 +1,14 @@
 # Query Design Log
 
+## 2026-09-01
+
+- Added the [pushdown after-action report](/.design/pushdown/after-action0.gpt56s.md),
+  separating the compatibility/startup wins of generated trusted profiles from
+  operation-level demand pushdown. It records live lookup/history/search probes,
+  the physically inverted pre-repair history plan, `--since`'s missing Session
+  recency access path, the explicit-only validation policy, the read-scope
+  snapshot-pin follow-up, and a measurement-driven map of further wins.
+
 ## 2026-08-30
 
 - Added [generated source profiles and demand-bounded queries](/.design/pushdown/draft4.gpt56s.md),

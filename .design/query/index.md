@@ -2,6 +2,10 @@
 
 ## Start Here
 
+- [Pushdown after action](/.design/pushdown/after-action0.gpt56s.md)
+  - Implementation-grounded account of what profiles and runtime cutover did,
+    what remained physically broad, how `--since` is limited by current access
+    paths, and the next history/search/storage/statement-construction wins.
 - [Generated source profiles and demand-bounded queries](/.design/pushdown/draft4.gpt56s.md)
   - Active encompassing design: trusted generated OpenCode profiles, compact
     `opencode --version` compatibility contracts, explicit generation and
