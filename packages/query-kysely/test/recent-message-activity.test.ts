@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { Effect } from "effect";
 import {
@@ -139,5 +140,26 @@ test("validates bounded ranges and positive finite limits", () => {
   ];
   for (const request of invalid) {
     assert.throws(() => readRecentMessageActivity(query, request));
+  }
+});
+
+test("rejects malformed physical metadata at the operation boundary", async () => {
+  const fixture = await activityFixture();
+  try {
+    const writer = new DatabaseSync(fixture.path);
+    writer.exec("update session_message set type = x'ff' where id = 'msg_new'");
+    writer.close();
+    await assert.rejects(Effect.runPromise(Effect.scoped(
+      acquireNodeOpenCodeSource({
+        path: fixture.path,
+        sourceID: "fixture-source",
+        profile: trustedSourceProfileFacts,
+      }).pipe(Effect.flatMap(({ query }) => readRecentMessageActivity(query, {
+        messageCreatedRange: { from: 30 },
+        limit: 1,
+      }))),
+    )), /messageType must be non-empty text/u);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
   }
 });

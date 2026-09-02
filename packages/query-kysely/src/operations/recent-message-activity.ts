@@ -50,6 +50,18 @@ function safeInteger(name: string, value: unknown, minimum = 0): number {
   return value;
 }
 
+function text(name: string, value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new RowDecodeError(`${name} must be non-empty text`, null);
+  }
+  return value;
+}
+
+function nullableText(name: string, value: unknown): string | null {
+  if (value === null) return null;
+  return text(name, value);
+}
+
 function validateRequest(request: RecentMessageActivityRequest): void {
   const range = request.messageCreatedRange;
   if (range.from === undefined && range.to === undefined) {
@@ -106,15 +118,18 @@ export function readRecentMessageActivity(
     read.all((context) => recentMessageActivityQuery(context, request)).pipe(
       Effect.flatMap((rows) => Effect.try({
         try: () => (rows as readonly ActivityRow[]).map((row) => {
-          const session = sessionAddress(sessionID(row.sessionID));
+          const session = sessionAddress(sessionID(text("sessionID", row.sessionID)));
           return observation({
-            target: target(read.source, messageAddress(session, messageID(row.messageID))),
+            target: target(read.source, messageAddress(session, messageID(text("messageID", row.messageID)))),
             value: Object.freeze({
-              messageType: row.messageType,
+              messageType: text("messageType", row.messageType),
               messageSeq: safeInteger("messageSeq", row.messageSeq),
               createdAt: safeInteger("createdAt", row.createdAt),
               updatedAt: safeInteger("updatedAt", row.updatedAt),
-              session: Object.freeze({ title: row.title, directory: row.directory }),
+              session: Object.freeze({
+                title: nullableText("session title", row.title),
+                directory: text("session directory", row.directory),
+              }),
             }),
             read: read.provenance,
           });
