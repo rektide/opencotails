@@ -850,3 +850,30 @@ conformance-tested.
   [direct search](/packages/query-kysely/src/operations/direct-search.ts), and
   [logical world](/packages/query-kysely/src/relations/world.ts) are the first
   operation and statement-construction targets.
+
+# Addendum: Implementation Supersessions (2026-09-02)
+
+Recorded after the landing audit
+([intent-audit0](/.design/pushdown/intent-audit0.glm53.md)); the body above is
+otherwise left as written on 2026-08-30.
+
+1. **Normal `opencode --version` check and `--trust-profile` did not ship.**
+   Normal execution trusts the decoded profile outright
+   ([`runtime.ts`](/src/profile/runtime.ts)); version checking exists only in
+   `profile validate --version` and `profile generate/refresh`. Rationale and
+   acceptance: the spawn cost ~1.1 s per invocation, and the trusted-cache
+   model already accepts natural stale-profile failures
+   ([after-action](/.design/pushdown/after-action0.gpt56s.md), "Trusted
+   runtime cutover").
+2. **`sources.json` multi-source resolution did not ship.** Only the
+   conventional XDG profile path and explicit `--profile` exist. The
+   catalog/relocation intent is now owned by the
+   `cotail-bookmarks-source-catalog` ticket rather than this design.
+3. **Certificates remain a stub.** The format field decodes, nothing
+   produces a certificate, and `validate --plans` reports recorded
+   certificates as unsupported. Land-or-drop decision still open.
+4. **Direct-search evidence-off omission is not yet fully honored**: witness
+   qualification still invokes payload validation
+   ([live-reprobe0](/.design/pushdown/live-reprobe0.glm53.md),
+   [materialization0](/.design/pushdown/materialization0.glm53.md)),
+   tracked as `cotail-search-oom`.

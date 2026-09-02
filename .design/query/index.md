@@ -2,6 +2,22 @@
 
 ## Start Here
 
+- [Draft4 intent audit](/.design/pushdown/intent-audit0.glm53.md)
+  - Landing audit of the draft4 source-profile design: step and acceptance
+  scorecards, review sharpening re-scored, and the intents that neither
+  landed nor got a decision (capability consumers, certificates,
+  `sources.json`, live measurement).
+- [Live post-repair probe](/.design/pushdown/live-reprobe0.glm53.md)
+  - Live 20.9 GB probe matrix after the operation repairs: metadata commands
+  at ~1.1–1.5 s, plus the content-search JavaScript heap OOM and its
+  validator-redundancy mechanism (`cotail-search-oom`).
+- [Document-union validation redundancy probe](/.design/pushdown/materialization0.glm53.md)
+  - Captured fixture evidence: the committed search SQL invokes the JS
+  payload validator ~7× per in-range message; materialization and
+  operation-owned variants measured as reference points.
+- [Founding problem statement](/.design/pushdown/problem0.glm53.md)
+  - Promoted from scratch: the measured 2026-08-29 report of silent exit 1
+  and unindexed search over the live database that motivated the wave.
 - [Pushdown after action](/.design/pushdown/after-action0.gpt56s.md)
   - Implementation-grounded account of what profiles and runtime cutover did,
     what remained physically broad, how `--since` is limited by current access

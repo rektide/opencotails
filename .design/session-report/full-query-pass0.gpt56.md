@@ -372,3 +372,9 @@ compatibility aliases remain after their callers move.
 - [History viewer design](/.design/history-viewer/design.md) is the shipped
   ancestor of the history rebuild. Note the deliberate break: its ISO-8601 JSON
   timestamps become epoch milliseconds under the uniform machine output rules.
+- Session-report **capture** decoding uses `Schema.check(Filter)` in
+  production; the decisive negative finding — Effect v4 beta.101's
+  `Schema.refine` widening `DecodingServices`, which breaks the
+  `ConstraintDecoder` contract — is preserved in the promoted scratch
+  investigation `.test-agent/session-report-capture/` (proto7) and closed
+  under `cotail-session-report-capture`.
