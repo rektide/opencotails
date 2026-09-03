@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { Effect } from "effect";
 import { literal } from "../src/direct/match.ts";
@@ -386,12 +387,14 @@ test("compiles visible qualification, root-window, child-window, and optional hy
 
     assert.doesNotMatch(operation, /hydrated_hits|evidence_message/u);
     assert.doesNotMatch(operation, /"sourceJSON"|"messageType"/u);
+    assert.doesNotMatch(withoutEvidence.sql, /cotail_validate_message/u);
     const evidenceOperation = withEvidence.sql.slice(withEvidence.sql.indexOf(', "candidate_sessions" as ('));
     const hydratedAt = evidenceOperation.indexOf(', "hydrated_hits" as (');
     assert.ok(hydratedAt > evidenceOperation.indexOf(', "selected_hits" as ('));
     assert.match(evidenceOperation.slice(hydratedAt), /left join "cotail_message" as "evidence_message"/u);
     assert.match(evidenceOperation.slice(hydratedAt), /"evidence_message"\."sourceJSON"/u);
     assert.match(evidenceOperation.slice(hydratedAt), /"evidence_message"\."messageType"/u);
+    assert.equal((withEvidence.sql.match(/cotail_validate_message/gu) ?? []).length, 1);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -410,7 +413,7 @@ test("does not window recent nonmatches ahead of later witness-qualified Session
   }
 });
 
-test("payload hydration adds validation only for the selected Message hit", async () => {
+test("witness qualification skips strict validation and hydration validates only the selected Message hit", async () => {
   const fixture = await searchFixture();
   try {
     const withoutHydration: string[] = [];
@@ -427,10 +430,39 @@ test("payload hydration adds validation only for the selected Message hit", asyn
       withoutEvidence.map((group) => group.session.target),
       withEvidence.map((group) => group.session.target),
     );
-    const count = (values: readonly string[], id: string) => values.filter((value) => value === id).length;
-    const ids = new Set([...withoutHydration, ...withHydration]);
-    assert.deepEqual([...ids].filter((id) => count(withHydration, id) !== count(withoutHydration, id)), ["msg_c0"]);
-    assert.equal(count(withHydration, "msg_c0"), count(withoutHydration, "msg_c0") + 1);
+    assert.deepEqual(withoutHydration, []);
+    assert.deepEqual(withHydration, ["msg_c0"]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("shape-only qualification ignores malformed JSON and strictly validates selected evidence", async () => {
+  const fixture = await searchFixture();
+  const database = new DatabaseSync(fixture.path);
+  try {
+    const insert = database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)");
+    insert.run("msg_malformed", "ses_d", "system", 0, 4, 4, "{malformed");
+    insert.run("msg_incomplete", "ses_d", "system", 1, 5, 5, JSON.stringify({ text: "alpha" }));
+  } finally {
+    database.close();
+  }
+
+  try {
+    const validations: string[] = [];
+    const request = {
+      witnesses: [alpha],
+      window: { sessions: { first: 1 }, childrenPerSession: 1 },
+    } as const;
+    const roots = await runSearch(fixture.path, { ...request, evidence: false }, (id) => validations.push(id));
+    assert.deepEqual(roots.map((group) => group.session.value.sessionID), ["ses_d"]);
+    assert.equal(validations.length, 0);
+
+    await assert.rejects(
+      runSearch(fixture.path, { ...request, evidence: true }, (id) => validations.push(id)),
+      /expected object/u,
+    );
+    assert.deepEqual(validations, ["msg_incomplete"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
@@ -472,7 +504,7 @@ test("indexed plan drives post-window document and hydration work from selected 
   }
 });
 
-test("indexed Message-created search constrains session_message before payload validation", async () => {
+test("indexed Message-created search constrains session_message without strict qualification validation", async () => {
   const fixture = await searchFixture();
   try {
     const request = {
@@ -486,9 +518,8 @@ test("indexed Message-created search constrains session_message before payload v
     ]);
 
     const sourceRangeAt = compiled.sql.indexOf('from "session_message" where "time_created" >= ?');
-    const validationAt = compiled.sql.indexOf("cotail_validate_message(");
-    assert.ok(sourceRangeAt >= 0 && validationAt > sourceRangeAt,
-      `Message range does not precede validation:\n${compiled.sql}`);
+    assert.ok(sourceRangeAt >= 0, `Message range is absent:\n${compiled.sql}`);
+    assert.doesNotMatch(compiled.sql, /cotail_validate_message/u);
     assert.equal(plan.some(({ detail }) => /SCAN session_message/u.test(detail)), false,
       plan.map(({ detail }) => detail).join("\n"));
     assert.equal(plan.some(({ detail }) =>
@@ -499,7 +530,7 @@ test("indexed Message-created search constrains session_message before payload v
   }
 });
 
-test("unrelated candidate Messages do not change selected results or hydration demand", async () => {
+test("strict validation demand stays selected-hit bounded as unrelated Messages grow", async () => {
   const fixture = await searchFixture(40);
   try {
     const withoutHydration: string[] = [];
@@ -515,17 +546,8 @@ test("unrelated candidate Messages do not change selected results or hydration d
     ]);
     assert.deepEqual(withoutEvidence.map((group) => [group.session.value.sessionID, group.truncated]), [["ses_b", true]]);
     assert.deepEqual(withEvidence.map((group) => [group.session.value.sessionID, group.truncated]), [["ses_b", true]]);
-    for (let index = 0; index < 40; index++) {
-      const id = `msg_noise_${index}`;
-      assert.equal(
-        withHydration.filter((value) => value === id).length,
-        withoutHydration.filter((value) => value === id).length,
-      );
-    }
-    assert.equal(
-      withHydration.filter((id) => id === "msg_b0").length,
-      withoutHydration.filter((id) => id === "msg_b0").length + 1,
-    );
+    assert.deepEqual(withoutHydration, []);
+    assert.deepEqual(withHydration, ["msg_b0"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

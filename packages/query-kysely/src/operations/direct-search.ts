@@ -191,7 +191,10 @@ function decodeRows(
  * witness, and only then windowed. Matching-document rank and totals follow
  * selected Sessions; revision payload hydration follows selected hits and is
  * absent outside evidence mode. Witness qualification over the document world
- * remains the intentionally unbounded-by-page residual.
+ * remains the intentionally unbounded-by-page residual. Qualification projects
+ * shape-compatible JSON without strict JavaScript validation; malformed or
+ * branch-incompatible payloads produce no documents. Evidence mode strictly
+ * validates selected Message-owned hits before returning them.
  */
 export function directSessionSearchQuery(
   context: QueryContext,
@@ -199,9 +202,10 @@ export function directSessionSearchQuery(
 ) {
   validate(request);
   const { source } = context;
-  const db = request.messageCreatedRange === undefined
-    ? context.db
-    : context.world({ messageCreatedRange: request.messageCreatedRange });
+  const db = context.world({
+    messagePayloadMode: "shape-only",
+    ...(request.messageCreatedRange === undefined ? {} : { messageCreatedRange: request.messageCreatedRange }),
+  });
   const staged = db
     .with("candidate_sessions", (qb) => {
       let candidates = qb.selectFrom("cotail_session")

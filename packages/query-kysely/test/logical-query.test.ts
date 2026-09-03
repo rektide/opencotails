@@ -72,7 +72,7 @@ test("queries Sessions and Messages without filling sequence gaps or reading com
     ]);
     assert.match(result.compiled.sql, /^with "cotail_scoped_message" as/);
     assert.ok(result.compiled.sql.indexOf('"cotail_scoped_message" as')
-      < result.compiled.sql.indexOf('"cotail_validated_message" as'));
+      < result.compiled.sql.indexOf('"cotail_projection_message" as'));
     assert.match(result.compiled.sql, /"session_v2"/);
     assert.match(result.compiled.sql, /"session_message"/);
     assert.deepEqual(result.compiled.parameters, [2]);
