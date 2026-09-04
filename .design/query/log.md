@@ -9,6 +9,11 @@
   “evidence off” to retain necessary SQL JSON qualification, and prioritizes
   requested-family projection, snapshot truth, and the capability/certificate
   decision.
+- Hardened the selected-hit validation fix after adversarial review: shape-only
+  projection is operation-private rather than exposed through the public typed
+  query world, evidence-off rows do not transfer document text, and conformance
+  now covers multiple witnesses, unrelated growth, valid all-family parity, and
+  the default strict-world boundary.
 
 ## 2026-09-01
 

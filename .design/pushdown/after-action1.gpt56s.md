@@ -56,10 +56,12 @@ pushdown landed, but the first live re-probe exposed a separate multiplicative
 cost: the JavaScript payload validator ran about seven times per in-range
 Message through the document union and exhausted a 4 GB V8 heap. Commit
 `e24298d8` removes strict validation from witness qualification and retains it at
-selected evidence hits. A post-fix 7-day live search returned five rows in 76
-seconds instead of OOMing; a 30-day no-snippet search returned five rows in 4
-minutes 36.68 seconds. That closes the catastrophic heap-growth mechanism, but
-SQL-native JSON expansion is still too slow to call content search fast.
+selected evidence hits. Review hardening in `0d5967c4` keeps shape-only relations
+operation-private and stops evidence-off results from transferring document text
+to JavaScript. A post-fix 7-day live search returned five rows in 76 seconds
+instead of OOMing; a 30-day no-snippet search returned five rows in 4 minutes
+36.68 seconds. That closes the catastrophic heap-growth mechanism, but SQL-native
+JSON expansion is still too slow to call content search fast.
 
 The game is therefore no longer “put a `WHERE` somewhere earlier.” It is:
 
@@ -226,6 +228,8 @@ Direct-search qualification now uses shape-only projection:
   whether a row can produce a document.
 - Syntactically malformed and branch-incompatible payloads produce no documents.
 - Evidence-off search performs zero strict JavaScript validations.
+- Evidence-off result rows omit document text and other evidence-only document
+  columns, although SQLite still projects text internally to determine matches.
 - Evidence-on search strictly validates selected Message-owned hits before
   returning excerpts and revision hashes.
 - A guard-compatible but otherwise schema-incomplete payload can qualify a root
@@ -233,7 +237,9 @@ Direct-search qualification now uses shape-only projection:
   is deliberate and regression-tested, not an accidental equivalence claim.
 
 Default arbitrary logical-world content queries remain strict. Shape-only mode
-is selected by the direct-search operation that owns the hydration boundary.
+is available through an operation-private symbol and a narrow Session/Message/
+Document relation set; it is not exposed by the public `QueryContext.world`.
+Direct search owns that seam and its hydration boundary.
 
 ### Current measured result
 
@@ -380,8 +386,9 @@ precede, content-search projection work.
 
 ## Recommended Order
 
-1. Keep `e24298d8`'s zero-validation qualification policy and update the P1 issue
-   acceptance language to match what content search can truthfully omit.
+1. Keep `e24298d8` and `0d5967c4`'s operation-private zero-validation
+   qualification policy and update the P1 issue acceptance language to match
+   what content search can truthfully omit.
 2. Implement requested-family, single-pass SQL document projection; re-probe 7d
    and 30d live content search.
 3. Resolve snapshot publication correctness.
