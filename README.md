@@ -1,6 +1,6 @@
 # opencoattails
 
-`cotail` searches and browses the session history stored by [OpenCode](https://opencode.ai/) in SQLite.
+> `cotail` searches and browses the session history stored by [OpenCode](https://opencode.ai/) in SQLite.
 
 Use it to find sessions by content, inspect recent work, or resolve the session associated with a running OpenCode process.
 
@@ -16,12 +16,12 @@ cotail get-session --id-only --profile ~/.config/cotail/profiles/opencode-local.
 
 The current CLI is an early `0.1.0` release with five working commands:
 
-| Command | Purpose |
-|---|---|
-| `cotail search` | Find sessions whose content matches every requested term |
-| `cotail history` | List sessions active within a time window |
-| `cotail tail` | List finite recent Message activity |
-| `cotail watch` | Observe newly visible Message activity |
+| Command              | Purpose                                                      |
+| -------------------- | ------------------------------------------------------------ |
+| `cotail search`      | Find sessions whose content matches every requested term     |
+| `cotail history`     | List sessions active within a time window                    |
+| `cotail tail`        | List finite recent Message activity                          |
+| `cotail watch`       | Observe newly visible Message activity                       |
 | `cotail get-session` | Resolve a Session from an ID, directory, or OpenCode process |
 
 Queries read OpenCode's live database directly using a trusted generated source profile. There is no Cotail data index or build step, and no `index` or `status` command yet.
@@ -114,22 +114,22 @@ cotail search sqlite --arrow > hits.arrow
 
 ### Search Options
 
-| Option | Meaning |
-|---|---|
-| `--profile <path>` | Use an explicit trusted source profile |
-| `--db <path>` | Override the database locator recorded in the profile |
-| `--limit <n>` | Return at most `n` Sessions; default `50` |
-| `--json` | Emit JSON Lines |
-| `--arrow` | Emit an Apache Arrow IPC stream |
-| `--title-only` | Search Session titles instead of content |
-| `--no-snippet` | Omit evidence snippets |
-| `--type <type>` | Search `text`, `reasoning`, or `tool`; default `text` |
-| `--since <cutoff>` | Only match Messages created at or after a duration or ISO date |
-| `--since-updated <cutoff>` | Require Sessions updated at or after a duration or ISO date |
+| Option                           | Meaning                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `--profile <path>`               | Use an explicit trusted source profile                                            |
+| `--db <path>`                    | Override the database locator recorded in the profile                             |
+| `--limit <n>`                    | Return at most `n` Sessions; default `50`                                         |
+| `--json`                         | Emit JSON Lines                                                                   |
+| `--arrow`                        | Emit an Apache Arrow IPC stream                                                   |
+| `--title-only`                   | Search Session titles instead of content                                          |
+| `--no-snippet`                   | Omit evidence snippets                                                            |
+| `--type <type>`                  | Search `text`, `reasoning`, or `tool`; default `text`                             |
+| `--since <cutoff>`               | Only match Messages created at or after a duration or ISO date                    |
+| `--since-updated <cutoff>`       | Require Sessions updated at or after a duration or ISO date                       |
 | `--since-updated-backfill <dur>` | Content Message-history lookback behind a `--since-updated` cutoff; default `21d` |
-| `--directory <path>` | Require the Session directory to contain `path` |
-| `-F`, `--fixed-strings` | Match literal substrings instead of regular expressions |
-| `-s`, `--case-sensitive` | Preserve case while matching |
+| `--directory <path>`             | Require the Session directory to contain `path`                                   |
+| `-F`, `--fixed-strings`          | Match literal substrings instead of regular expressions                           |
+| `-s`, `--case-sensitive`         | Preserve case while matching                                                      |
 
 `--since` and `--since-updated` accept values such as `30m`, `24h`, `7d`, and ISO dates (both also accept `--flag=value`). `--since` is an exact Message-created cutoff: only Messages created at or after the cutoff can match, and title-only search requires Message activity in that range. `--since-updated` is an exact Session-updated cutoff. Content search reads Message history only from the cutoff minus the backfill window (default `21d`), which can miss older matching content - a documented false-negative tradeoff for speed. Pass `--since-updated-backfill off` (or `false`, `none`, `-1`) to search all Message history of the updated Sessions instead. Title-only search needs no Message-history scan, so it applies the exact Session cutoff directly and ignores this heuristic backfill. When both `--since` and `--since-updated` are supplied, both exact cutoffs hold; content history uses the stricter lower bound, while title search uses explicit `--since` only for activity. Session and directory predicates are applied before matching.
 
@@ -161,16 +161,16 @@ cotail history --arrow > history.arrow
 
 ### History Options
 
-| Option | Meaning |
-|---|---|
-| `--since <cutoff>` | Activity cutoff; default `31d` |
-| `--limit <n>` | Maximum Sessions; default is unlimited |
-| `--directory <path>` | Require the Session directory to contain `path` |
-| `--json` | Emit JSON Lines |
-| `--tsv` | Emit tab-separated rows with a header |
-| `--arrow` | Emit an Apache Arrow IPC stream |
-| `--profile <path>` | Use an explicit trusted source profile |
-| `--db <path>` | Override the database locator recorded in the profile |
+| Option               | Meaning                                               |
+| -------------------- | ----------------------------------------------------- |
+| `--since <cutoff>`   | Activity cutoff; default `31d`                        |
+| `--limit <n>`        | Maximum Sessions; default is unlimited                |
+| `--directory <path>` | Require the Session directory to contain `path`       |
+| `--json`             | Emit JSON Lines                                       |
+| `--tsv`              | Emit tab-separated rows with a header                 |
+| `--arrow`            | Emit an Apache Arrow IPC stream                       |
+| `--profile <path>`   | Use an explicit trusted source profile                |
+| `--db <path>`        | Override the database locator recorded in the profile |
 
 The output distinguishes Messages created at or after the cutoff (`RECENT`) from all Messages in the Session (`TOTAL`). Both counts use only V2 `session_message` rows.
 
@@ -196,17 +196,17 @@ directory. They do not read or validate Message payload JSON.
 
 ### Tail And Watch Options
 
-| Option | Tail | Watch | Meaning |
-|---|---:|---:|---|
-| `--since <duration-or-ISO>` | Yes | Yes | Message-created cutoff; default `31d`. Watch durations move while ISO cutoffs stay fixed. |
-| `--limit <n>` | Yes | Yes | Positive finite result/sample size; default `50` |
-| `--interval <duration>` | No | Yes | Delay between non-overlapping samples; default `2s` |
-| `--format human\|jsonl` | Yes | Yes | Explicit output format; default `human` |
-| `--json` | Yes | Yes | Alias for `--format jsonl` |
-| `--no-initial` | No | Yes | Establish the first sample silently |
-| `--once` | No | Yes | Emit one bounded sample and exit |
-| `--profile <path>` | Yes | Yes | Use an explicit trusted source profile |
-| `--db <path>` | Yes | Yes | Override the database locator recorded in the profile |
+| Option                      | Tail | Watch | Meaning                                                                                   |
+| --------------------------- | ---: | ----: | ----------------------------------------------------------------------------------------- |
+| `--since <duration-or-ISO>` |  Yes |   Yes | Message-created cutoff; default `31d`. Watch durations move while ISO cutoffs stay fixed. |
+| `--limit <n>`               |  Yes |   Yes | Positive finite result/sample size; default `50`                                          |
+| `--interval <duration>`     |   No |   Yes | Delay between non-overlapping samples; default `2s`                                       |
+| `--format human\|jsonl`     |  Yes |   Yes | Explicit output format; default `human`                                                   |
+| `--json`                    |  Yes |   Yes | Alias for `--format jsonl`                                                                |
+| `--no-initial`              |   No |   Yes | Establish the first sample silently                                                       |
+| `--once`                    |   No |   Yes | Emit one bounded sample and exit                                                          |
+| `--profile <path>`          |  Yes |   Yes | Use an explicit trusted source profile                                                    |
+| `--db <path>`               |  Yes |   Yes | Override the database locator recorded in the profile                                     |
 
 Human activity is one tab-delimited physical line per Message with no header,
 footer, color, or cursor movement. JSON output is one complete object per line.
@@ -245,27 +245,27 @@ When PID metadata provides `OPENCODE_DB`, that path is used for the process look
 
 ### Get Session Options
 
-| Option | Meaning |
-|---|---|
-| `-s`, `--session <id>` | Resolve an exact Session ID |
-| `-C`, `--directory <dir>` | Resolve the latest Session for an exact directory |
-| `--profile <path>` | Use an explicit trusted source profile |
-| `--db <path>` | Override the database locator recorded in the profile |
-| `--json` | Emit the Session as JSON Lines |
-| `--id-only` | Print only the Session ID |
-| `--arrow` | Emit an Apache Arrow IPC stream |
+| Option                    | Meaning                                               |
+| ------------------------- | ----------------------------------------------------- |
+| `-s`, `--session <id>`    | Resolve an exact Session ID                           |
+| `-C`, `--directory <dir>` | Resolve the latest Session for an exact directory     |
+| `--profile <path>`        | Use an explicit trusted source profile                |
+| `--db <path>`             | Override the database locator recorded in the profile |
+| `--json`                  | Emit the Session as JSON Lines                        |
+| `--id-only`               | Print only the Session ID                             |
+| `--arrow`                 | Emit an Apache Arrow IPC stream                       |
 
 ## Output Formats
 
 Human-readable output is the default. Machine-readable formats are written to stdout; diagnostics are written to stderr.
 
-| Format | Search | History | Tail | Watch | Get Session |
-|---|---:|---:|---:|---:|---:|
-| Human | Yes | Yes | Yes | Yes | Yes |
-| JSON Lines | `--json` | `--json` | `--json` | `--json` | `--json` |
-| TSV | No | `--tsv` | Human contract | Human contract | No |
-| Arrow IPC stream | `--arrow` | `--arrow` | No | No | `--arrow` |
-| Bare ID | No | No | No | No | `--id-only` |
+| Format           |    Search |   History |           Tail |          Watch | Get Session |
+| ---------------- | --------: | --------: | -------------: | -------------: | ----------: |
+| Human            |       Yes |       Yes |            Yes |            Yes |         Yes |
+| JSON Lines       |  `--json` |  `--json` |       `--json` |       `--json` |    `--json` |
+| TSV              |        No |   `--tsv` | Human contract | Human contract |          No |
+| Arrow IPC stream | `--arrow` | `--arrow` |             No |             No |   `--arrow` |
+| Bare ID          |        No |        No |             No |             No | `--id-only` |
 
 Arrow output uses a command-specific schema rather than one sparse shared record. Strings are `Utf8`, counts are signed `Int64`, and times are millisecond timestamps.
 
