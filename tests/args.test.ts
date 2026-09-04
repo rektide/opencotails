@@ -24,7 +24,7 @@ test("parseSince treats bare durations as relative cutoffs from now", () => {
   const before = Date.now();
   const cutoff = parseSince("2d");
   const after = Date.now();
-  assert.ok(cutoff <= before - 2 * DAY && cutoff >= after - 2 * DAY);
+  assert.ok(cutoff >= before - 2 * DAY && cutoff <= after - 2 * DAY);
 });
 
 test("since specifications preserve moving durations and fixed cutoffs", () => {
