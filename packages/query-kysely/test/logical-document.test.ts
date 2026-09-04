@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Kysely, SqliteDialect } from "kysely";
-import { logicalWorld } from "../src/relations/world.ts";
+import { logicalSearchWorld, logicalWorld } from "../src/relations/world.ts";
 import { ReadonlyNodeSqliteDatabase } from "../src/runtime/node-sqlite.ts";
 import type { PhysicalOpenCodeV2 } from "../src/source/contracts.ts";
 import { indexedOpenCodeV2Fixture } from "./fixtures/opencode-v2/index.ts";
@@ -91,7 +91,7 @@ function documentFixture() {
   });
   const adapter = new ReadonlyNodeSqliteDatabase(fixture.database);
   const physical = new Kysely<PhysicalOpenCodeV2>({ dialect: new SqliteDialect({ database: adapter }) });
-  return { adapter, db: logicalWorld(physical) };
+  return { adapter, db: logicalWorld(physical), searchDb: logicalSearchWorld(physical) };
 }
 
 test("normalizes every supported searchable V2 semantic family", async () => {
@@ -130,6 +130,40 @@ test("normalizes every supported searchable V2 semantic family", async () => {
     assert.equal(documents.find((row) => row.field === "tool.name")?.exposure, "tool");
     assert.equal(documents.find((row) => row.field === "shell.command")?.exposure, "shell");
     assert.equal(documents.find((row) => row.field === "attachment.uri")?.exposure, "sensitive-metadata");
+  } finally {
+    adapter.close();
+  }
+});
+
+test("shape-only search projection preserves every valid canonical document row", async () => {
+  const { adapter, db, searchDb } = documentFixture();
+  try {
+    const select = (world: typeof db) => world.selectFrom("cotail_document").selectAll()
+      .orderBy("messageSeq").orderBy("fieldOrder").orderBy("documentKey").execute();
+    const strict = await select(db);
+    const shapeOnly = await select(searchDb as typeof db);
+    assert.deepEqual(shapeOnly, strict);
+  } finally {
+    adapter.close();
+  }
+});
+
+test("the public logical world remains strict for schema-incomplete payloads", async () => {
+  const fixture = indexedOpenCodeV2Fixture();
+  fixture.database.exec(`
+    insert into session_v2
+      (id, project_id, slug, directory, title, version, time_created, time_updated)
+    values ('ses_incomplete', 'prj', 'incomplete', '/work', 'Incomplete', '2', 1, 1)
+  `);
+  fixture.database.prepare("insert into session_message values (?, ?, ?, ?, ?, ?, ?)")
+    .run("msg_incomplete", "ses_incomplete", "system", 0, 1, 1, JSON.stringify({ text: "alpha" }));
+  const adapter = new ReadonlyNodeSqliteDatabase(fixture.database);
+  const physical = new Kysely<PhysicalOpenCodeV2>({ dialect: new SqliteDialect({ database: adapter }) });
+  try {
+    await assert.rejects(
+      logicalWorld(physical).selectFrom("cotail_document").select("documentKey").execute(),
+      /expected object/u,
+    );
   } finally {
     adapter.close();
   }

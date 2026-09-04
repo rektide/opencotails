@@ -1,17 +1,17 @@
 import type { Expression, ExpressionBuilder, SelectQueryBuilder, SqlBool } from "kysely";
-import type { CotailRelations } from "../relations/schema.ts";
+import type { CotailSearchRelations } from "../relations/schema.ts";
 
 declare const witnessNameBrand: unique symbol;
 
 export type WitnessName = string & { readonly [witnessNameBrand]: true };
 export type DocumentPredicate = (
-  eb: ExpressionBuilder<CotailRelations, "cotail_document">,
+  eb: ExpressionBuilder<CotailSearchRelations, "cotail_document">,
 ) => Expression<SqlBool>;
 
 export interface DocumentWitness {
   readonly name: WitnessName;
   readonly matches: DocumentPredicate;
-  readonly forSession: <DB extends CotailRelations, TB extends keyof DB>(context: {
+  readonly forSession: <DB extends CotailSearchRelations, TB extends keyof DB>(context: {
     readonly eb: ExpressionBuilder<DB, TB>;
     readonly sessionID: Expression<string>;
   }) => Expression<SqlBool>;
@@ -28,12 +28,12 @@ export function documentWitness(name: WitnessName, matches: DocumentPredicate): 
   return Object.freeze({
     name,
     matches,
-    forSession: <DB extends CotailRelations, TB extends keyof DB>({ eb, sessionID }: {
+    forSession: <DB extends CotailSearchRelations, TB extends keyof DB>({ eb, sessionID }: {
       readonly eb: ExpressionBuilder<DB, TB>;
       readonly sessionID: Expression<string>;
     }): Expression<SqlBool> => {
       const documents = eb.selectFrom("cotail_document") as unknown as SelectQueryBuilder<
-        CotailRelations,
+        CotailSearchRelations,
         "cotail_document",
         Record<never, never>
       >;

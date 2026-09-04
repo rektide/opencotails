@@ -237,3 +237,9 @@ export interface CotailSessionRelations {
 export interface CotailSessionMessageRelations extends CotailSessionRelations {
   readonly cotail_message: MessageMetadataRelation;
 }
+
+/** Relations exposed to operation-private direct-search construction. */
+export interface CotailSearchRelations extends CotailSessionRelations {
+  readonly cotail_message: MessageRelation;
+  readonly cotail_document: DocumentRelation;
+}

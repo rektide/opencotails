@@ -388,6 +388,13 @@ test("compiles visible qualification, root-window, child-window, and optional hy
     assert.doesNotMatch(operation, /hydrated_hits|evidence_message/u);
     assert.doesNotMatch(operation, /"sourceJSON"|"messageType"/u);
     assert.doesNotMatch(withoutEvidence.sql, /cotail_validate_message/u);
+    const finalSelectAt = operation.lastIndexOf(') select "selected_sessions"."sourceID"');
+    assert.ok(finalSelectAt > 0);
+    const finalSelect = operation.slice(finalSelectAt);
+    assert.doesNotMatch(
+      finalSelect.slice(0, finalSelect.indexOf(" from ")),
+      /"selected_hits"\."(?:documentKey|text|field|messageID)"/u,
+    );
     const evidenceOperation = withEvidence.sql.slice(withEvidence.sql.indexOf(', "candidate_sessions" as ('));
     const hydratedAt = evidenceOperation.indexOf(', "hydrated_hits" as (');
     assert.ok(hydratedAt > evidenceOperation.indexOf(', "selected_hits" as ('));
@@ -548,6 +555,29 @@ test("strict validation demand stays selected-hit bounded as unrelated Messages 
     assert.deepEqual(withEvidence.map((group) => [group.session.value.sessionID, group.truncated]), [["ses_b", true]]);
     assert.deepEqual(withoutHydration, []);
     assert.deepEqual(withHydration, ["msg_b0"]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("strict validation budget follows selected evidence hits across multiple witnesses", async () => {
+  const fixture = await searchFixture(40);
+  try {
+    const withoutHydration: string[] = [];
+    const withHydration: string[] = [];
+    const request = {
+      witnesses: [alpha, beta],
+      window: { sessions: { first: 1 }, childrenPerSession: 2 },
+    } as const;
+    const [withoutEvidence, withEvidence] = await Promise.all([
+      runSearch(fixture.path, { ...request, evidence: false }, (id) => withoutHydration.push(id)),
+      runSearch(fixture.path, { ...request, evidence: true }, (id) => withHydration.push(id)),
+    ]);
+
+    assert.deepEqual(withoutEvidence.map((group) => group.session.value.sessionID), ["ses_c"]);
+    assert.deepEqual(withEvidence.map((group) => group.session.value.sessionID), ["ses_c"]);
+    assert.deepEqual(withoutHydration, []);
+    assert.deepEqual(withHydration, ["msg_c0", "msg_c1"]);
   } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }

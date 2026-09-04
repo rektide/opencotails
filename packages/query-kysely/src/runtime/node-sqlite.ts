@@ -20,8 +20,10 @@ import {
   type QueryExecutionPhase,
   type QueryExecutionReason,
 } from "../query/errors.ts";
+import { directSearchWorld } from "../query/operation-context.ts";
 import {
   logicalRootWorld,
+  logicalSearchWorld,
   logicalWorld,
   type LogicalRootMessageScope,
   type LogicalRootWorld,
@@ -361,12 +363,13 @@ function acquireNodeOpenCodeSourceWithHooks(
   ).pipe(Effect.flatMap((resource) => Semaphore.make(1).pipe(Effect.map((semaphore) => {
     const source = sourceKey(config.sourceID);
     const world = (scope = {}) => logicalWorld(resource.physical, scope);
+    const searchWorld = (scope = {}) => logicalSearchWorld(resource.physical, scope);
     const rootWorld = ((scope?: LogicalRootMessageScope) => scope === undefined
       ? logicalRootWorld(resource.physical)
       : logicalRootWorld(resource.physical, scope)) as LogicalRootWorld;
     const query = makeNodeLogicalQuery({
       native: resource.native,
-      context: { db: world(), world, rootWorld, profile: config.profile, source },
+      context: { db: world(), world, rootWorld, [directSearchWorld]: searchWorld, profile: config.profile, source },
       semaphore,
       hooks,
     });

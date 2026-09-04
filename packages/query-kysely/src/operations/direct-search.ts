@@ -25,6 +25,7 @@ import { sessionID } from "../domain/identifier.ts";
 import type { ReadProvenance } from "../domain/observation.ts";
 import type { LogicalQueryShape, QueryContext, QueryError } from "../query/logical-query.ts";
 import type { DocumentRelation } from "../relations/schema.ts";
+import { directSearchWorld } from "../query/operation-context.ts";
 
 export interface DirectSessionSearch {
   readonly witnesses: readonly DocumentWitness[];
@@ -45,8 +46,9 @@ export interface DirectSessionSearch {
 
 export type DirectSearchError = QueryError | RowDecodeError;
 
-interface SearchRow extends DocumentRelation {
+type SearchRow = Partial<Omit<DocumentRelation, "sessionID">> & {
   readonly sourceID: string;
+  readonly sessionID: string;
   readonly sessionProjectID: string;
   readonly sessionSlug: string;
   readonly sessionTitle: string | null;
@@ -59,7 +61,7 @@ interface SearchRow extends DocumentRelation {
   readonly sessionTotal: number | null;
   readonly sourceJSON?: string | null;
   readonly messageType?: string | null;
-}
+};
 
 const documentColumns = [
   "documentKey", "ownerKind", "sessionID", "projectID", "workspaceID", "messageID",
@@ -119,6 +121,12 @@ function payloadHash(sourceJSON: string, messageID: string, messageType: string)
   return createHash("sha256").update(canonical({ ...data, id: messageID, type: messageType })).digest("hex");
 }
 
+function assertEvidenceRow(row: SearchRow): asserts row is SearchRow & DocumentRelation {
+  for (const column of documentColumns) {
+    if (!(column in row)) throw new RowDecodeError(`evidence row has no ${column}`, row.documentKey);
+  }
+}
+
 function decodeRows(
   rows: readonly SearchRow[],
   request: DirectSessionSearch,
@@ -157,6 +165,7 @@ function decodeRows(
     if (row.witnessName === null || row.sessionRank === null) continue;
     group.returned++;
     if (!request.evidence) continue;
+    assertEvidenceRow(row);
     const documentTarget = mapDocumentTarget(sourceKey(row.sourceID), row);
     if (row.messageID !== null && (row.messageUpdatedAt === null || row.sourceJSON == null || row.messageType == null)) {
       throw new RowDecodeError("Message-owned evidence has no source revision", row.documentKey);
@@ -202,10 +211,9 @@ export function directSessionSearchQuery(
 ) {
   validate(request);
   const { source } = context;
-  const db = context.world({
-    messagePayloadMode: "shape-only",
-    ...(request.messageCreatedRange === undefined ? {} : { messageCreatedRange: request.messageCreatedRange }),
-  });
+  const db = context[directSearchWorld](request.messageCreatedRange === undefined
+    ? undefined
+    : { messageCreatedRange: request.messageCreatedRange });
   const staged = db
     .with("candidate_sessions", (qb) => {
       let candidates = qb.selectFrom("cotail_session")
@@ -328,9 +336,7 @@ export function directSessionSearchQuery(
       .leftJoin("session_totals", "session_totals.sessionID", "selected_sessions.sessionID")
       .select([
         ...sessionColumns,
-        ...hitColumns,
         "selected_hits.witnessName",
-        "selected_hits.witnessOrder",
         "selected_hits.sessionRank",
         "session_totals.sessionTotal",
       ])

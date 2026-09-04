@@ -14,6 +14,7 @@ import type {
   ToolCallRelation,
   ToolResultRelation,
   UserMessageRelation,
+  CotailSearchRelations,
 } from "./schema.ts";
 
 export interface LogicalWorldScope {
@@ -21,12 +22,6 @@ export interface LogicalWorldScope {
     readonly from?: number;
     readonly to?: number;
   };
-  /**
-   * Shape-only projections rely on branch-local SQLite JSON guards. Operations
-   * using this mode must validate any payload they publish at their hydration
-   * boundary. The public logical world remains strict by default.
-   */
-  readonly messagePayloadMode?: "strict" | "shape-only";
 }
 
 export interface LogicalRootMessageScope {
@@ -92,14 +87,15 @@ export function logicalRootWorld(
   return seeded as unknown as ReadonlyQueryCreator<CotailSessionMessageRelations>;
 }
 
-export function logicalWorld(
+function buildLogicalWorld(
   physical: Kysely<PhysicalOpenCodeV2>,
-  scope: LogicalWorldScope = {},
+  scope: LogicalWorldScope,
+  validatePayloads: boolean,
 ): ReadonlyQueryCreator<CotailRelations> {
   const messageCreatedRange = scope.messageCreatedRange;
-  const projectedMessageData = scope.messagePayloadMode === "shape-only"
-    ? sql<string>`case when json_valid(data) then data end`
-    : sql<string>`cotail_validate_message(id, type, data)`;
+  const projectedMessageData = validatePayloads
+    ? sql<string>`cotail_validate_message(id, type, data)`
+    : sql<string>`case when json_valid(data) then data end`;
   const seeded = physical
     .with("cotail_scoped_message", (db) => {
       let messages = db.selectFrom("session_message").selectAll();
@@ -430,4 +426,19 @@ export function logicalWorld(
   // Kysely retains physical members in a CTE database type. This is the sole
   // audited narrowing from the validated physical schema to the logical world.
   return seeded as unknown as ReadonlyQueryCreator<CotailRelations>;
+}
+
+export function logicalWorld(
+  physical: Kysely<PhysicalOpenCodeV2>,
+  scope: LogicalWorldScope = {},
+): ReadonlyQueryCreator<CotailRelations> {
+  return buildLogicalWorld(physical, scope, true);
+}
+
+/** @internal Shape-only world for direct search's selected-hit validation policy. */
+export function logicalSearchWorld(
+  physical: Kysely<PhysicalOpenCodeV2>,
+  scope: LogicalWorldScope = {},
+): ReadonlyQueryCreator<CotailSearchRelations> {
+  return buildLogicalWorld(physical, scope, false) as unknown as ReadonlyQueryCreator<CotailSearchRelations>;
 }

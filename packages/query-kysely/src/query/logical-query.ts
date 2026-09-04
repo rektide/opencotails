@@ -7,6 +7,7 @@ import type { CotailRelations } from "../relations/schema.ts";
 import type { LogicalRootWorld, LogicalWorldScope } from "../relations/world.ts";
 import type { TrustedSourceProfileFacts } from "../profile/types.ts";
 import { QueryCompileError, QueryExecutionError } from "./errors.ts";
+import { directSearchWorld, type DirectSearchWorld } from "./operation-context.ts";
 
 export type AnyLogicalSelect = SelectQueryBuilder<any, any, any>;
 
@@ -14,6 +15,7 @@ export interface QueryContext {
   readonly db: ReadonlyQueryCreator<CotailRelations>;
   readonly world: (scope?: LogicalWorldScope) => ReadonlyQueryCreator<CotailRelations>;
   readonly rootWorld: LogicalRootWorld;
+  readonly [directSearchWorld]: DirectSearchWorld;
   readonly profile: TrustedSourceProfileFacts;
   readonly source: SourceKey;
 }
