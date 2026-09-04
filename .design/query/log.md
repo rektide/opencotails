@@ -1,5 +1,15 @@
 # Query Design Log
 
+## 2026-09-04
+
+- Added the [post-repair pushdown after-action](/.design/pushdown/after-action1.gpt56s.md),
+  reconciling the completed history/search/title/activity changes with live
+  measurements and exact command-specific `--since` semantics. It records the
+  direct-search strict-validator OOM mechanism and selected-hit fix, corrects
+  “evidence off” to retain necessary SQL JSON qualification, and prioritizes
+  requested-family projection, snapshot truth, and the capability/certificate
+  decision.
+
 ## 2026-09-01
 
 - Added the [pushdown after-action report](/.design/pushdown/after-action0.gpt56s.md),

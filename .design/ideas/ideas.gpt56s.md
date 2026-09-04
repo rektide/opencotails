@@ -713,3 +713,28 @@ When choosing a program, ask:
   Message source, stable sequence semantics, and upstream export precedent.
 - [Query design index](/.design/query/index.md) provides the architecture lineage
   and should remain the entry point for implemented query decisions.
+
+# Addendum: Post-Pushdown Update
+
+History, Message-time range pushdown, root-only title search, and metadata-only
+tail/watch have now landed and passed live probes. They are no longer the active
+frontier described in the opening situation. The current accounting lives in the
+[post-repair after-action](/.design/pushdown/after-action1.gpt56s.md).
+
+The immediate order has also changed:
+
+1. Content-search qualification no longer runs the strict JavaScript payload
+   validator; strictness is deferred to selected evidence hits.
+2. The remaining core-search bottleneck is repeated SQL-native JSON projection.
+   Requested-family, single-pass projection now precedes new search field modes.
+3. Snapshot/provenance publication and the capability/certificate disposition
+   remain foundational correctness and architecture decisions.
+4. Source catalog, context relations, reporting, transcript, bookmarks, and the
+   other programs remain valuable after the core search path is usable.
+
+The first post-fix 7-day live content search completed in 76 seconds rather than
+OOMing; a 30-day no-snippet probe completed in 4 minutes 36.68 seconds. These are
+correctness and memory-safety improvements, not interactive performance results.
+FTS remains the likely endpoint for broad ranked search, but canonical direct
+projection should be repaired first so it remains a trustworthy fallback and
+authoritative recheck path.

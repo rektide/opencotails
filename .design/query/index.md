@@ -2,6 +2,10 @@
 
 ## Start Here
 
+- [Pushdown after action, post-repair](/.design/pushdown/after-action1.gpt56s.md)
+  - Current accounting after selected-root history, staged/range-bounded search,
+    title specialization, tail/watch, live re-probes, and the strict-validator
+    OOM fix; includes exact per-command `--since` semantics and next priorities.
 - [Draft4 intent audit](/.design/pushdown/intent-audit0.glm53.md)
   - Landing audit of the draft4 source-profile design: step and acceptance
   scorecards, review sharpening re-scored, and the intents that neither

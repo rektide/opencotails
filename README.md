@@ -69,7 +69,7 @@ The selected profile supplies the database path, supported Message variants, and
 
 Normal commands trust every decoded profile fact unchanged. They do not invoke `opencode`, compare profile metadata with the current Cotail build, inspect SQLite schema, indexes, migrations, Message variants, or query plans, refresh implicitly, or fall back to runtime discovery. A missing profile reports the exact `cotail profile generate ...` command needed to create it. Stale profiles fail naturally through ordinary SQLite or lazy payload-decoding errors.
 
-Every database connection is opened read-only and placed in SQLite `query_only` mode. Deep per-payload validation remains lazy and runs only when content is queried.
+Every database connection is opened read-only and placed in SQLite `query_only` mode. Deep per-payload validation remains lazy. General logical-world content queries validate projected payloads strictly; direct search qualifies with SQLite JSON shape guards and validates only selected Message evidence hits strictly.
 
 ### Profile Lifecycle
 
