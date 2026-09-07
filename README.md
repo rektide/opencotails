@@ -334,8 +334,9 @@ Temporary experiments belong under `.test-agent/`. Design work and accepted arch
 
 The next query-oriented work is tracked in beads rather than specified as shipped behavior in this README:
 
+- **P1: agent-callable tools and shared read RPC**, starting with an exact read-only Session lookup; exact bookmark/link writes follow separately, without waiting for next-response binding. See [the tool and bookmark k=v link proposal](/.design/bookmarks/links-tools0.gpt6a.md) and `cotail-tools`. These surfaces are not implemented yet.
 - Complete the V2 relation map for lineage, projects, workspaces, pending input, and persisted Events.
-- Add durable bookmarks over query Targets and Observations.
+- Add durable bookmarks over query Targets and Observations, with key/value metadata for exact cross-session links. Storage is explicitly selectable, defaulting to owned `rektide_*` data in the selected OpenCode source DB; existing query commands remain read-only.
 - Support hosted execution through OpenCode's Effect SQL service.
 - Build transcript, reporting, and indexed-search consumers over the shared query world.
 

@@ -19,3 +19,8 @@ defines the adjacent per-read seam. Registry scope may acquire the query module;
 it does not own each operation's connection lease, transaction, provenance, or
 stream. The execution design intentionally avoids a provider abstraction until
 a second implementation is concrete.
+
+[Callable tools and bookmark links](/.design/bookmarks/links-tools0.gpt6a.md)
+proposes an early finite read tool/RPC over existing query operations. The query
+registry remains a scoped instance registry, not a generic tool dispatcher;
+neither full CLI adoption nor deferred bookmark intent binding blocks this tracer.

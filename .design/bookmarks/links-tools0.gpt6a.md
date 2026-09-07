@@ -161,6 +161,14 @@ not “all references everywhere.” Selecting external storage keeps source/sto
 identity separate. [summary0's source discipline](/.design/bookmarks/summary0.gpt6a.md#minimal-source-catalog-discipline)
 still applies: profile labels/`--db` do not authenticate durable identity.
 
+The [Rekon namespace constitution](file:///home/rektide/src/rekon/constitution/README.md#doc-constitution-namespace)
+is an extension path for document/ticket references, not a global-registry
+prerequisite. Future typed native references must preserve their own authority;
+do not invent Cotail Address grains for Beads tickets or turn bookmark links
+into dependency edges. Beads supports external dependency references, but the
+parent reports no configured/verified bridge in the current consumers. This plan
+does not configure/hydrate one or add unresolved external blockers.
+
 ## Callable Operations: Three Independently Deliverable Cuts
 
 | Cut | Capability and owner | Necessary prerequisites |
@@ -260,6 +268,9 @@ growth remain separate work, not prerequisites to this first usable tool slice.
 Parent evidence: Opensesser currently injects only `client.session`; root-only
 listing excludes children. No Cotail integration exists. A related-links view
 needs typed read RPC plus **explicit target lookup**, not that root-list filter.
+The parent's [consumer design](file:///home/rektide/src/opensesser/design/bookmark-links/consumer0.gpt6a.md)
+(`0b5b09e8`, `opensess-bookmark-links`) is a reported consumer reference, not an
+independently reviewed peer design in this pass.
 Keep client-scoped ordered selection and Session lookers separate from links;
 following relationships must be explicit, not automatic recent-everywhere expansion.
 The parent owns Opensesser/Rekon changes and consumer-specific details.

@@ -2,6 +2,12 @@
 
 ## Current Proposal And Baseline
 
+- [`links-tools0.gpt6a.md`](/.design/bookmarks/links-tools0.gpt6a.md) - New human
+  priority: definitive cross-session links as bookmark k=v Target values, plus
+  P1 callable read operations and exact bookmark/link tools sharing public read
+  RPC with UI consumers. No separate graph store, global namespace prerequisite,
+  or dependency on deferred next-response binding. Design remains unaccepted.
+
 - [`summary0.gpt6a.md`](/.design/bookmarks/summary0.gpt6a.md) - Unaccepted
   extension for explicitly marked summaries, historical/child Message targets,
   pending next-response intent, and selectable `rektide_cotail_*` SQLite storage
@@ -13,8 +19,9 @@
   design. Bookmarks are durable intent over canonical query `Target`s with
   optional typed captures. Session reporting owns report capture; bookmarks own
   source relocation, persistence, resolution, and user-facing management.
-  Its XDG-sidecar-only storage restriction is explicitly reopened by `summary0`;
-  the rest is preserved rather than overwritten.
+  Its XDG-sidecar-only storage restriction is superseded by the current human
+  selected/default-colocated DB intent; exact implementation choices remain
+  unaccepted. Its argument is preserved as lineage rather than overwritten.
 
 ## Superseded Lineage
 
