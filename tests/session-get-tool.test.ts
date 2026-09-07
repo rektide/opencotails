@@ -50,6 +50,14 @@ test("input cannot select paths, operations or unbounded IDs", async () => {
   assert(SessionGetInput.safeParse(request()).success);
 });
 
+test("invalid operator budgets fail before source access", async () => {
+  for (const source of [{ maxOutputBytes: 4095 }, { maxOutputBytes: 1_048_577 }, { maxOutputBytes: NaN },
+    { busyTimeoutMs: -1 }, { busyTimeoutMs: 0.5 }]) {
+    const result = await sessionGet({ ...source, profilePath: "/must-not-open" }, request());
+    assert(!result.ok && result.error.code === "invalid-configuration");
+  }
+});
+
 test("expected profile, source and Session failures are plain declared errors", async t => {
   const source = await fixture(t);
   const missing = await sessionGet(source, request("ses_absent"));

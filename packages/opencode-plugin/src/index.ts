@@ -38,7 +38,9 @@ export default Plugin.define({
       output: SessionGetSuccess,
       execute: input => read(input).pipe(Effect.flatMap(result => result.ok
         ? Effect.succeed({ output: result, content: JSON.stringify(result) })
-        : Effect.fail(new Tool.Error({ message: result.error.message, metadata: { cotail: result.error } })))),
+        // Hosts may normalize a foreign SDK Error and discard its metadata;
+        // the documented message survives, so carry the plain error contract there.
+        : Effect.fail(new Tool.Error({ message: JSON.stringify(result.error) })))),
     })).pipe(Effect.orDie);
   }),
 });
