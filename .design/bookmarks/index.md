@@ -2,6 +2,12 @@
 
 ## Current Proposal And Baseline
 
+- [`foundation0.gpt6a.md`](/.design/bookmarks/foundation0.gpt6a.md) — concrete
+  six-table source/schema/transaction checkpoint and registered-Target interface.
+  Disposable Node/Bun and actual host-driver probes establish co-located write
+  feasibility and synchronous busy-wait constraints. Awaiting parent review;
+  no production bookmark implementation or accepted-tip change.
+
 - [Audit disposition](/.design/bookmarks/audit-review0.gpt6a.md) — parent review of
   the corrected fresh-GX [seven-day dredge](/.design/bookmarks/dredge0.glm53.md).
   Releases the guidance gate to the source/storage checkpoint, with bounded
