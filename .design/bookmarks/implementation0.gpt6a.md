@@ -1,7 +1,7 @@
 ---
 type: ImplementationBrief
 title: Exact bookmarks and links — next callable capability
-description: Pre-audit proposed reading order, gated on a fresh GX recovery of existing bookmark guidance before any implementation handoff.
+description: Audited reading order for the next bounded bookmark source/storage checkpoint; detailed schema and later implementation slices remain review-gated.
 resource: /.design/bookmarks/implementation0.gpt6a.md
 tags: [bookmarks, links, tools, implementation, source-identity]
 status: draft
@@ -19,15 +19,14 @@ sources:
 
 # Commission and gate
 
-**New human gate:** a fresh GX must dredge Cotail's last seven days of bookmark
-history plus existing local guidance, including this conversation's trail.
-That audit is running in `ses_f86308e82ffeWe0qHb6pgb1IVp`, tracked by
-`cotail-bookmarks-guidance-audit` (blocking the source-catalog prerequisite).
-The parent must review
-its findings before any bookmark implementation or Astra handoff. This brief was
-saved as the **pre-audit candidate** in `6e66a5ce`; it must not outrank recovered
-decisions merely because it is newer. The separate read-only GX cleanup may
-finish, but does not release this bookmark gate.
+**Guidance gate reviewed:** the fresh GX dredge ran in
+`ses_f86308e82ffeWe0qHb6pgb1IVp`, with corrected dossier `75fdd1b5`. The parent
+read it and checked live Dolt; [the disposition](/.design/bookmarks/audit-review0.gpt6a.md)
+releases `cotail-bookmarks-guidance-audit` to the next bounded source/storage
+checkpoint. Search limitations and the draft5 dating correction remain explicit.
+This brief's **pre-audit candidate** is preserved at `6e66a5ce`; its newer date
+never made it authoritative over earlier decisions. Gate release is not acceptance
+of every detailed schema proposal or authorization of the whole epic.
 
 The human identifies **bookmarks as the next major tool win**. The first read-only
 tool/RPC is implemented; GX owns any review fixes. Do not begin dependent bookmark
@@ -41,7 +40,8 @@ that every detailed proposal is accepted.
 
 ## Read these in order
 
-1. [Callable read receipt](/.design/bookmarks/callable-read0.gpt6a.md) and
+1. [Audit disposition](/.design/bookmarks/audit-review0.gpt6a.md), then
+   [callable read receipt](/.design/bookmarks/callable-read0.gpt6a.md) and
    [actual plugin usage](/packages/opencode-plugin/README.md): reusable operation,
    public tool/RPC, cancellation and error behavior. Read any subsequent GX review
    fixes before coding; the receipt's original pending-review status is historical.
@@ -87,7 +87,8 @@ future extension. Then implement a fixture-backed vertical foundation:
   Preserve the distinction from the existing read tool's
   `identityStatus: "selection-scoped"`. Its profile-derived Target must **not**
   simply be persisted as a registered bookmark target.
-- Initialize only Cotail-owned `rektide_cotail_*` objects in the selected store.
+- Initialize only Cotail-owned `rektide_*` objects in the selected store;
+  `rektide_cotail_*` is the proposed domain prefix for the schema checkpoint.
   Default store selection follows the resolved source DB; an explicit alternate
   store remains possible. Source registration and bookmark-store initialization
   must compose without a circular package/module dependency.

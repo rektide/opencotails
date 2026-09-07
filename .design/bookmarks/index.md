@@ -2,11 +2,15 @@
 
 ## Current Proposal And Baseline
 
+- [Audit disposition](/.design/bookmarks/audit-review0.gpt6a.md) — parent review of
+  the corrected fresh-GX [seven-day dredge](/.design/bookmarks/dredge0.glm53.md).
+  Releases the guidance gate to the source/storage checkpoint, with bounded
+  search coverage, live-ticket corrections and the older draft5 foundation clear.
+
 - [`implementation0.gpt6a.md`](/.design/bookmarks/implementation0.gpt6a.md) -
-  **Pre-audit candidate**, gated on a fresh GX dredge of the last seven days of
-  bookmark history and existing local guidance. Maps proposed execution order,
-  live P1 tickets and fixture acceptance, but must not supersede recovered
-  decisions or authorize a bookmark/Astra handoff before that audit is reviewed.
+  Audited reading order and bounded checkpoint brief. Maps current P1 tickets,
+  superseded guidance, durable source identity and fixture acceptance; detailed
+  schema and later runtime slices still require their architectural checkpoints.
 
 - [`callable-read0.gpt6a.md`](/.design/bookmarks/callable-read0.gpt6a.md) - First
   authorized runtime slice: shared bounded Session read plus public tool/RPC.

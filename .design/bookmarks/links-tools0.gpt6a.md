@@ -202,7 +202,16 @@ become prerequisites for Cotail's standalone SQLite read. Public
 registration and `ctx.rpc.register(Rpc.define(...))`; TUI clients use
 `context.client.rpc(definition)`. RPC events are live-only; reads remain restart truth.
 
-### Recommended smallest host for the current consumers
+<a id="recommended-smallest-host-for-the-current-consumers"></a>
+
+### Historical helper proposal — superseded for the read slice
+
+**Later evidence supersedes the read-host recommendation below.**
+[runtime-probe0](/.design/bookmarks/runtime-probe0.gpt6a.md) verified the actual
+Cotail read path under Node and Bun; [callable-read0](/.design/bookmarks/callable-read0.gpt6a.md)
+records the reviewed direct in-process tool/RPC implementation. The following
+paragraphs are preserved as the earlier proposal, not current instructions.
+Successful co-located writer concurrency remains a separate unproven concern.
 
 Use a thin **OpenCode server plugin**, with one shared operation bridge called
 by `cotail_session_get` and `CotailRead.sessionGet` RPC. Keep SQLite/query code in
