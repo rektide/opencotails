@@ -62,7 +62,7 @@ not durable identity. Do not persist a profile/schema hash as source identity.
 |---|---|
 | Register a new unbound locator | Atomically assign a SourceKey and initial locator row. Repeating at the same realpath/profile returns the existing key, including after reopen. |
 | Symlink alias of a current locator | Same realpath → same binding. Do not create another source just because spelling differs. |
-| Adopt an existing SourceKey into another selected store | Explicit operator declaration plus reason; install that key and locator only in this store. No writes to the other store or source file. |
+| Adopt an existing SourceKey into another selected store | Explicit operator declaration plus reason; install that key and locator only in this store. No writes outside the selected store, including to a separately located source. |
 | Adopt key already current at another path, or path already bound to another key | `source-binding-conflict`; never last-write-wins or automatic replica selection. Same key/path/profile is an idempotent repeat. |
 | Relocate/rebind | Operator supplies key, expected locator revision, new selection and reason. Append a new locator revision and retire the previous current row in one store transaction. A changed profile locator also requires explicit rebind. |
 | New registration at a retired locator | Report the historical binding rather than resurrecting/reassigning it silently. Explicit relocation back to that locator is allowed; independent reuse/import is later management work. |
@@ -75,9 +75,10 @@ survives. Do not choose a replica, compare transcript contents, or remap stored
 Targets automatically.
 
 **Detection limit:** a copied co-located catalog copies source/store IDs too.
-A supplied locator override never changes the catalog's stored locator. If two
-selected/explicitly compared store receipts have the same storeID at different
-realpaths, report `store-copy-conflict`, not two independently writable stores.
+A supplied locator override never changes the catalog's stored locator. A later
+multi-store caller comparing receipts with the same storeID at different realpaths
+must report `store-copy-conflict`, not treat them as independent writable stores.
+This single-store interface returns path/ID receipts but does not scan other stores.
 One selected store cannot discover an unmentioned copy, a replacement at the same
 path, hard-link aliases not established by realpath, or an independently registered
 identity in another catalog. There is no intrinsic store-path pin or global
@@ -178,6 +179,10 @@ The old default-report-capture proposal is not reinstated.
 Proposed names, not existing imports. Public functions return Promises of a
 strict plain `{ ok: true, ... } | { ok: false, error }` union; only input/output
 contracts cross the two Effect runtimes. Private query Effects stay private.
+Operator selection permits optional `createStoreFile: true` **only** with an
+explicit alternate bookmark path; it defaults to false and is separate from
+`initializeStore`, which controls owned-schema initialization. Bound operations
+require both `bookmarkDatabasePath` and `expectedStoreID`.
 
 ```ts
 // Operator-only bootstrap: paths and initialization never come from a model.
@@ -234,8 +239,9 @@ For a new create, normalize/decode the bounded input, then:
 1. Open the existing store read-only and check the request ledger. Identical
    normalized request returns its original receipt **before source access**;
    changed reuse yields `request-conflict`. A successful retry still works if
-   the source was subsequently deleted or became unavailable.
-2. Resolve the registered source and its current locator revision; call the
+   the source was subsequently deleted or became unavailable. On a new request,
+   read the source binding/revision in this scope, then **close the store read**.
+2. Use that registered source binding and its locator revision; call the
    real [`getSession`](/packages/query-kysely/src/operations/resolve.ts#L53) using
    that durable SourceKey. It accepts explicit children and never reads Message
    bodies. Close the source read before starting a write transaction.
@@ -247,6 +253,10 @@ For a new create, normalize/decode the bounded input, then:
    Effect yield, filesystem/profile read, model call or source read in this span.
 4. Any statement/commit failure rolls back; a receipt is returned only after
    commit. No nested host transaction or cross-database `ATTACH` transaction.
+
+Closing both read scopes matters for a standalone store's default rollback-journal
+mode too: our own reader must not prevent our writer from committing. Do not
+switch that file to WAL merely to conceal a leaked read transaction.
 
 Ledger comparison uses versioned canonical **normalized input**, not a hash of
 raw JSON or the current mutable bookmark. Preserve note bytes; omitted note is
@@ -305,7 +315,7 @@ The generic fixture checked unchanged upstream schema/Session/Message/KV rows
 and preserved sentinel `user_version`/`application_id`. Host fixture writes were
 intentional setup/stimulus against scratch only. It loaded the **actual host
 database adapters**, not a complete plugin/server lifecycle or real workload.
-No source DB, live service, plugin installation, dependency or production file
+No live source DB, service, plugin installation, dependency or production file
 was changed. These probes test mechanisms, not an unimplemented catalog codec.
 
 **Recommended first writer: timeout 0, one attempt, typed `store-busy`** (and
@@ -391,7 +401,9 @@ Fixture acceptance must cover:
    operations. Existing read-only/query_only tests remain unchanged and pass.
 6. Bounded list uses the owned index and stable continuation; zero-timeout
    contention returns busy without partial records; successful interleaving/reopen
-   on Node/Bun, including the actual host-driver fixture above.
+   on Node/Bun, including the actual host-driver fixture above. Exercise standalone
+   rollback-journal storage as well as co-located WAL; neither read scope remains
+   open while acquiring the writer.
 
 ### Preserve the k=v path, do not implement it yet
 
