@@ -2,16 +2,23 @@
 
 ## Current Proposal And Baseline
 
+- [`implementation0.gpt6a.md`](/.design/bookmarks/implementation0.gpt6a.md) - Parent
+  reading order and checkpoint brief for the next exact-bookmark/link capability
+  after GX read-only review fixes. Maps the live P1 tickets, superseded guidance,
+  durable-source gap and fixture acceptance; not authorization of the whole epic.
+
 - [`callable-read0.gpt6a.md`](/.design/bookmarks/callable-read0.gpt6a.md) - First
   authorized runtime slice: shared bounded Session read plus public tool/RPC.
   Records isolated-host error/cancellation/unload evidence, dependency versions,
-  passing tests, and the remaining parent-review/source-binding gates. Not live-installed.
+  passing tests, GX review/parent acceptance and the remaining source-binding
+  gate. Not live-installed.
 
 - [`runtime-probe0.gpt6a.md`](/.design/bookmarks/runtime-probe0.gpt6a.md) - Actual
   production fixture execution: 12/12 cases pass on Node 26.6.0 and Bun 1.4.1,
   including a two-Effect-version Promise/JSON boundary. Revises the speculative
-  Node-helper recommendation toward a direct in-process first read tool/RPC;
-  loaded host integration and runtime implementation remain unaccepted.
+  Node-helper recommendation toward a direct in-process first read tool/RPC.
+  This historical prerequisite is followed by the callable-read implementation
+  above; it does not prove successful co-located writer concurrency.
 
 - [`links-tools0.gpt6a.md`](/.design/bookmarks/links-tools0.gpt6a.md) - New human
   priority: definitive cross-session links as bookmark k=v Target values, plus
