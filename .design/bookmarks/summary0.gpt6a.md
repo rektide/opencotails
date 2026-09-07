@@ -359,6 +359,13 @@ the child: parent and child sequence numbers are not comparable. An already
 streaming child response is similarly excluded; select its ID explicitly if it
 is the intended response. If the target is idle, the first later execution can
 provide the candidate; merely observing idle at registration does not cancel it.
+An idle registration has no established input context: the first subsequent
+delivered user Message establishes that context rather than superseding the
+intent. A later delivered user Message supersedes it. An in-execution
+registration already has its context and is superseded by the next delivered
+user Message. This deliberately narrow proposed rule is per delivered Message,
+not an invented atomic prompt-batch identifier; the producer review must accept
+or revise it explicitly, including the case of several steers delivered together.
 
 Choose candidates in target Session order, not callback arrival order or wall
 clock order. Durable nonblank text makes the first eligible Message a candidate;
@@ -392,7 +399,7 @@ stateDiagram-v2
   [*] --> Pending: admit next-response intent
   Pending --> Candidate: first new Message with durable visible text
   Candidate --> Bound: successful Step settlement and atomic store bind
-  Candidate --> EndedUnbound: failed or interrupted candidate
+  Candidate --> EndedUnbound: candidate Step failure or user interruption
   Pending --> EndedUnbound: cancel, superseding user input, execution ends without text
   Pending --> NeedsReview: source history cannot establish continuity
   Candidate --> NeedsReview: source history cannot establish continuity
@@ -405,16 +412,16 @@ stateDiagram-v2
 | Tool-only / reasoning-only / whitespace-only Message | Skip; no candidate and no bookmark. |
 | Pre-output retry, repeated started event, continuation rejection before output | Keep one pending intent; do not create duplicate marks. |
 | Nonblank text, then successful Step.Ended | Bind exactly that Message, even if it also has tools. Preserve finish reason; a length-limited result is not labeled a complete final answer. |
-| Candidate has text, then Step.Failed or user interruption | `ended-unbound`, with candidate Target and partial/failure reason. Do not silently bind an automatic continuation or a later prompt's answer. Explicit historical marking can retain the partial Message. |
+| Candidate has text, then provider failure of that Step or user interruption | `ended-unbound`, with candidate Target and partial/failure reason, even when the runner can automatically continue in a new Message. Do not silently bind that continuation or a later prompt's answer. Explicit historical marking can retain the partial Message. An aborted Step alone does not distinguish user interruption from shutdown; establish the execution reason first. |
 | Successful execution ends without an eligible text Message | `ended-unbound: no-response`. |
-| New user input is delivered before binding | Proposed `ended-unbound: superseded`; queued admission alone does not cancel. Synthetic tool/child notices do not count as a new user question. |
+| New user input is delivered before binding | Proposed `ended-unbound: superseded` after input context is established; the first delivery following an idle registration establishes it instead. Queued admission alone does not cancel. Synthetic tool/child notices do not count as a new user question. |
 | Explicit cancel or terminal user interruption before candidate | `ended-unbound`, never automatic retargeting on a later resume. |
 | Shutdown/process death or disconnected observer | Suspend automatic decision and reconcile from the saved source cut. Keep intent durable; do not interpret disconnection as user cancellation or silently resume across an unproven gap. |
 | Duplicate/out-of-order observer delivery | Reconcile source order; conditional single-store transition creates at most one Bookmark per intent. |
 
 The proposed ownership split is: Rekon owns lifecycle observation, source-fence
-acquisition, and scheduling the
-next-response resolver; Cotail owns durable intent/binding operations and exact
+acquisition, and scheduling the next-response resolver; Cotail owns durable
+intent/binding operations and exact
 target/capture validation. Cotail binds pending→bound plus bookmark insertion
 in one transaction in the selected bookmark store. Repeated bind to the same
 target returns the original result; a different candidate after binding is a
@@ -508,7 +515,7 @@ observation times rather than inventing one.
 | Decision | Recommendation / meaningful alternative |
 |---|---|
 | Response granularity | Accept next **new settled text-bearing Message**, excluding the invoking/current Message. Alternative: next text segment, including later text within that Message; this changes the target grain and requires a different explicit policy ID. |
-| Interrupted / superseded intent | Keep partial candidate unbound and end on delivered new user input; reconcile shutdown gaps. Alternative: carry intent into later prompts/continuations, but only with an explicit carry policy, never silently. |
+| Interrupted / superseded intent | Keep partial candidate unbound; distinguish user interruption from shutdown. End on delivered new user input after context is established, with the idle-first-delivery exception above. Review multiple-steer delivery explicitly. Alternative: carry intent into later prompts/continuations, but only with an explicit carry policy, never silently. |
 | Physical storage | Owned `rektide_cotail_*` tables in the selected DB, separate writer. Alternative: namespaced KV records, only after transaction, indexing, and alternate-DB selection constraints are resolved. User's selected-DB default is the requirement, not the question. |
 | “Last summary” order | Latest explicit mark time; expose target chronology separately. Alternative: newest target Message sequence, which makes marking older material less visible. |
 | Capture default | No content capture, preserving draft5's privacy boundary. Opt-in visible-text capture for offline readback; a different default must be explicit. |
@@ -524,7 +531,10 @@ This design pass checked 48 local/file link targets in this document and the
 bookmark index, read the cited source and existing tickets, and inspected only
 profile metadata/executable symlink paths. No live OpenCode DB was opened, no
 OpenCode service was invoked, and no runtime test suite was run for docs-only
-changes. Ticket graph checks belong to the accompanying ticket update.
+changes. `bd dep cycles` reported no cycles. An explicit ticket export was needed
+to capture the complete update immediately despite `export.auto=true`; comparison
+showed changes to exactly the five existing bookmark issues and two new children,
+with no unrelated issue changes or removals.
 
 All runtime acceptance tests belong to later implementation on temporary
 fixtures, **not** the user's live OpenCode database.
@@ -548,7 +558,8 @@ fixtures, **not** the user's live OpenCode database.
 5. **Intent traces:** same-Message later text exclusion, tool-only steps,
    mixed text/tools, whitespace, pre-output retry, incomplete-stream continuation,
    failure after flushed text, user versus shutdown interruption, new delivered
-   steer, queued-but-undelivered input, child-local fence, and zero-response
+   steer, idle-first-delivery and multiple-steer behavior,
+   queued-but-undelivered input, child-local fence, and zero-response
    completion follow the table above.
 6. **Durability:** process loss before/after admission, candidate, and binding;
    duplicate/out-of-order notifications; same-ID retries/payload conflict;
@@ -571,7 +582,7 @@ Reuse `cotail-bookmarks`, `cotail-bookmarks-source-catalog`,
 Append history describing the proposed storage revision instead of erasing the
 prior XDG/no-source-write choices. Their runtime work remains open.
 
-Two missing bookmark-domain slices merit targeted children:
+Two missing bookmark-domain slices now have open, design-gated children:
 
 - `cotail-bookmarks-mark-intent`: durable request/intent/conditional binding
   contract, tested using supplied ordered evidence; Rekon owns the agent tool
