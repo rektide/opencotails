@@ -275,6 +275,32 @@ When both text formats are requested, `history --json --tsv` emits JSON Lines. F
 
 ## Query Architecture
 
+### Callable Session Read
+
+This checkout also exposes one bounded async read operation and an optional
+[OpenCode V2 read plugin](/packages/opencode-plugin/README.md):
+`cotail_session_get` and typed `CotailRead.sessionGet` RPC call the same
+`sessionGet` operation. They have passed disposable-fixture and isolated-host
+checks; the plugin is private/unpublished and has not been installed into the
+live service.
+
+```ts
+import { sessionGet } from "./src/tools/session-get/index.ts";
+
+const result = await sessionGet(
+  { profilePath: "/path/to/source-profile.json" },
+  { schema: "cotail.session-get.input/v1", sessionID: "ses_child" },
+);
+```
+
+Source configuration belongs to the operator, not callable input. Results
+preserve the canonical Session Target/report/read provenance and explicitly label
+identity `selection-scoped`: a profile is not durable catalog identity, and its
+database is not automatically the connected OpenCode server. No bookmark writes,
+Message-body reads, profile refresh, or helper process are introduced.
+
+### Logical Query World
+
 Production commands consume a shared V2 logical query world rather than querying OpenCode's physical tables directly.
 
 ```mermaid
@@ -334,7 +360,7 @@ Temporary experiments belong under `.test-agent/`. Design work and accepted arch
 
 The next query-oriented work is tracked in beads rather than specified as shipped behavior in this README:
 
-- **P1: agent-callable tools and shared read RPC**, starting with an exact read-only Session lookup; exact bookmark/link writes follow separately, without waiting for next-response binding. See [the tool and bookmark k=v link proposal](/.design/bookmarks/links-tools0.gpt6a.md) and `cotail-tools`. These surfaces are not implemented yet.
+- **P1: expand callable tools and shared RPC.** The first exact read-only Session operation/tool/RPC is implemented and fixture-verified, pending parent review and consumer source binding. Exact bookmark/link writes remain planned separately, without waiting for next-response binding. See [the implementation receipt](/.design/bookmarks/callable-read0.gpt6a.md), [link proposal](/.design/bookmarks/links-tools0.gpt6a.md), and `cotail-tools`.
 - Complete the V2 relation map for lineage, projects, workspaces, pending input, and persisted Events.
 - Add durable bookmarks over query Targets and Observations, with key/value metadata for exact cross-session links. Storage is explicitly selectable, defaulting to owned `rektide_*` data in the selected OpenCode source DB; existing query commands remain read-only.
 - Support hosted execution through OpenCode's Effect SQL service.

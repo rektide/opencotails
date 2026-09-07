@@ -2,6 +2,11 @@
 
 ## Current Proposal And Baseline
 
+- [`callable-read0.gpt6a.md`](/.design/bookmarks/callable-read0.gpt6a.md) - First
+  authorized runtime slice: shared bounded Session read plus public tool/RPC.
+  Records isolated-host error/cancellation/unload evidence, dependency versions,
+  passing tests, and the remaining parent-review/source-binding gates. Not live-installed.
+
 - [`runtime-probe0.gpt6a.md`](/.design/bookmarks/runtime-probe0.gpt6a.md) - Actual
   production fixture execution: 12/12 cases pass on Node 26.6.0 and Bun 1.4.1,
   including a two-Effect-version Promise/JSON boundary. Revises the speculative
