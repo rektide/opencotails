@@ -14,6 +14,9 @@ sources:
   - id: bookmark-predecessor
     resource: /.design/bookmarks/draft5.gpt56.md
     title: Durable references over canonical observations
+  - id: session-mementos
+    resource: file:///home/rektide/src/rekon/design/session-mementos/brief0.gpt6a.md
+    title: Rekon session-mementos work anchor and client-scoped ordered selection
   - id: cotail-profile
     resource: /src/profile/runtime.ts
     title: Implemented trusted profile and locator selection
@@ -48,6 +51,16 @@ tool and the practice of producing useful summaries. Cotail owns durable
 bookmarks, their source-qualified targets, and retrieval. The tool should default
 to marking the next response, allow an arbitrary historical Message, and allow a
 child Session as its target.
+
+The cross-project work anchor is **`rekon-session-mementos`**, with
+[`brief0.gpt6a.md`](file:///home/rektide/src/rekon/design/session-mementos/brief0.gpt6a.md)
+committed as `bfabb06c`. Its clarified first consumer is the OpenCode terminal
+**exit epilogue**, primarily for **this window/client**. Ordered composable
+selection rules choose Sessions; ordered Session lookers gather content.
+Recent-everywhere is explicit opt-in, not the default, and shared tabs alone do
+not prove exclusive client ownership. Cotail consumes the selected Targets; it
+does not own client inventory, the selection pipeline, terminal layout, or
+freeze-before-teardown. Display work can proceed before bookmarks exist.
 
 **New user direction:** bookmark storage is an explicitly selectable database;
 its default is `rektide_*` records/tables in the selected OpenCode channel's
@@ -399,7 +412,8 @@ stateDiagram-v2
 | Shutdown/process death or disconnected observer | Suspend automatic decision and reconcile from the saved source cut. Keep intent durable; do not interpret disconnection as user cancellation or silently resume across an unproven gap. |
 | Duplicate/out-of-order observer delivery | Reconcile source order; conditional single-store transition creates at most one Bookmark per intent. |
 
-Rekon owns lifecycle observation, source-fence acquisition, and scheduling the
+The proposed ownership split is: Rekon owns lifecycle observation, source-fence
+acquisition, and scheduling the
 next-response resolver; Cotail owns durable intent/binding operations and exact
 target/capture validation. Cotail binds pending→bound plus bookmark insertion
 in one transaction in the selected bookmark store. Repeated bind to the same
@@ -415,16 +429,32 @@ complete authoritative history with lifecycle evidence). Unknown retention,
 revert/deletion, shutdown continuity, or a missing fence must produce
 `needs-review`/unsupported, not “the first response I happened to observe.”
 Historical explicit marks can ship without this automatic-binding capability.
+The separate `rekon-session-mementos-mark` inquiry is investigating the
+`opencode-subagent-recovery` producer/tool host. This document specifies the
+required cross-owner semantics, not an approved hook, transport, or observer
+implementation. Reconcile that inquiry before accepting pending-intent ownership
+and the concrete registration-fence wire schema.
 
 ## Retrieval For Several Active Sessions
 
-Propose a finite `sessionOverview` operation over **an explicit bounded list of
-`Target<SessionAddress>` values**, with a caller-supplied source/store selection.
-Rekon or a future inventory/rank consumer decides which Sessions are active.
-Cotail history recency is not proof of busy/idle/attention state. Children can be
-included as independent rows; aggregation into the parent is explicit UI policy.
+Propose a finite `latestSummaryBookmarks` operation over **an explicit bounded
+list of `Target<SessionAddress>` values**, with caller-supplied source/store
+selection. Return results keyed by those Targets without replacing caller order
+with global recency. This is the bookmark looker's input, not a new universal
+SessionReport bag or mandatory overview command.
 
-For each Session return distinct products:
+The display owner's ordered rules decide which Sessions belong to this
+window/client and which activity restrictions apply. Cotail history recency is
+not proof of client membership or busy/idle/attention state. Children can be
+included as independent rows; aggregation into the parent is explicit selection
+and presentation policy. Do not default to querying recently updated Sessions
+everywhere because that happens to be easy with `history`.
+
+The ordered lookers should retain these distinct products for each selected
+Session. Cotail's new bookmark lookup owns the summary/intent rows; existing
+OpenCode data or separately composed Cotail Message operations can supply the
+question/response looker. This proposal does not require a second implementation
+of epilogue Message gathering in Cotail:
 
 | Field | Meaning |
 |---|---|
@@ -490,6 +520,12 @@ next-response binding must wait for its specific lifecycle/recovery evidence.
 
 ## Test And Review Criteria
 
+This design pass checked 48 local/file link targets in this document and the
+bookmark index, read the cited source and existing tickets, and inspected only
+profile metadata/executable symlink paths. No live OpenCode DB was opened, no
+OpenCode service was invoked, and no runtime test suite was run for docs-only
+changes. Ticket graph checks belong to the accompanying ticket update.
+
 All runtime acceptance tests belong to later implementation on temporary
 fixtures, **not** the user's live OpenCode database.
 
@@ -518,7 +554,9 @@ fixtures, **not** the user's live OpenCode database.
    duplicate/out-of-order notifications; same-ID retries/payload conflict;
    competing bind attempts; missing retained history. At most one bound Bookmark
    per intent; a pending receipt never claims to be a saved summary.
-7. **Readback:** newest mark of older history, unresolved newest mark, no marks,
+7. **Readback:** explicit bounded caller-selected Sessions and preserved caller
+   order, no implicit recent-everywhere expansion, newest mark of older history,
+   unresolved newest mark, no marks,
    pending mark alongside prior summary, newer user/no newer assistant, streaming
    assistant, child rows, source loss, content mutation, opt-in captures, and
    absence of generated/inferred fallback.
@@ -538,17 +576,23 @@ Two missing bookmark-domain slices merit targeted children:
 - `cotail-bookmarks-mark-intent`: durable request/intent/conditional binding
   contract, tested using supplied ordered evidence; Rekon owns the agent tool
   and source observer implementation.
-- `cotail-bookmarks-session-overview`: finite multi-Session summary/user/assistant
-  retrieval product; no new active-state inference or ranked terminal screen.
+- `cotail-bookmarks-summary-lookup`: latest explicit summary bookmark retrieval
+  for an already selected bounded set of Session Targets; no new selection
+  framework, active-state inference, duplicate question/response looker, or screen.
 
-Relate the latter to `cotail-watch-rank` rather than duplicating screen work.
+Relate the latter to `cotail-watch-rank` as another potential consumer, not the
+primary UI requirement. `rekon-session-mementos-display` owns the client-scoped
+epilogue and `rekon-session-mementos-composition` owns broader composition design.
 Relate automatic binding's source-fidelity need to `cotail-watch-exact-events`,
 without claiming the existing watcher fulfills it or requiring a global watch
 product before a small per-Session adapter. Rekon ticket ownership stays with
-the parent session.
+the parent session; all new Cotail implementation work remains acceptance-gated.
 
 ## Cross-References
 
+- [Rekon session-mementos brief](file:///home/rektide/src/rekon/design/session-mementos/brief0.gpt6a.md)
+  is the cross-project work anchor: this-window/client selection and ordered
+  lookers belong to the epilogue; durable summary lookup belongs to Cotail.
 - [Bookmark draft5](/.design/bookmarks/draft5.gpt56.md) is the predecessor:
   preserve Target/capture/resolution distinctions; this proposal explicitly
   reopens its persistence restriction and adds Message marks/pending intent.

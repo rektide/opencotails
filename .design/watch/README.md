@@ -82,6 +82,11 @@ the old plan mechanically:
 
 ## Cross-References
 
+- [Summary marks and selectable bookmark storage](/.design/bookmarks/summary0.gpt6a.md)
+  is a concrete downstream consumer and fidelity constraint: Cotail's bounded
+  metadata watcher cannot bind exact next-response intent. Its first display
+  consumer is a caller-selected, client-scoped epilogue, not an implicit global
+  activity screen; latest summary retrieval stays separate from inventory/rank.
 - [Tail/watch exploration](/.design/watchman/tail-watch.gpt56s.md) is the current
   known-versus-supposed map and links the implementation evidence.
 - [Recent Message activity operation](/packages/query-kysely/src/operations/recent-message-activity.ts)

@@ -358,6 +358,11 @@ This is broader product composition but a smaller bookmark module.
 
 ## Cross-References
 
+- [Summary marks and selectable storage proposal](/.design/bookmarks/summary0.gpt6a.md)
+  preserves this draft's Target/capture/source-catalog model while explicitly
+  reopening the XDG-sidecar-only persistence restriction for the new user
+  direction. It adds Message targets and pending next-response intent; it is not
+  accepted and does not make ordinary query connections writable.
 - [Canonical Session reporting](/.design/session-report/full-query-pass0.gpt56.md)
   supplies the Session observation and capture payload instead of a bookmark-owned
   descriptor.

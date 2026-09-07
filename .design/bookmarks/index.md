@@ -1,11 +1,20 @@
 # Bookmark Design Index
 
-## Active Direction
+## Current Proposal And Baseline
 
-- [`draft5.gpt56.md`](/.design/bookmarks/draft5.gpt56.md) - Active replacement
+- [`summary0.gpt6a.md`](/.design/bookmarks/summary0.gpt6a.md) - Unaccepted
+  extension for explicitly marked summaries, historical/child Message targets,
+  pending next-response intent, and selectable `rektide_cotail_*` SQLite storage
+  defaulting to the selected OpenCode source DB. Verifies channel/profile limits
+  and preserves ordinary read-only queries. Linked to Rekon's
+  `rekon-session-mementos` client-scoped epilogue work; no runtime implementation.
+
+- [`draft5.gpt56.md`](/.design/bookmarks/draft5.gpt56.md) - Foundational replacement
   design. Bookmarks are durable intent over canonical query `Target`s with
   optional typed captures. Session reporting owns report capture; bookmarks own
   source relocation, persistence, resolution, and user-facing management.
+  Its XDG-sidecar-only storage restriction is explicitly reopened by `summary0`;
+  the rest is preserved rather than overwritten.
 
 ## Superseded Lineage
 
@@ -32,6 +41,9 @@
 
 ## Related Designs
 
+- [Rekon session-mementos brief](file:///home/rektide/src/rekon/design/session-mementos/brief0.gpt6a.md)
+  is the cross-project anchor: ordered this-window/client selection and Session
+  lookers belong to the epilogue; Cotail supplies durable summary retrieval.
 - [Canonical Session reporting](/.design/session-report/full-query-pass0.gpt56.md)
   supplies capture-ready Session observations.
 - [V2 relational query world](/.design/query/design3.gpt56.md) supplies Address,

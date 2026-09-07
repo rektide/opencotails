@@ -38,3 +38,8 @@ own.
 
 Use [`index.md`](/query/index.md) for progressive disclosure and
 [`log.md`](/query/log.md) for dated changes.
+
+The [summary-bookmark storage proposal](/.design/bookmarks/summary0.gpt6a.md)
+reuses Target/Observation and preserves trusted read-only query acquisition. Its
+new explicitly selected bookmark writer is a separate capability, even when
+owned bookmark tables share the OpenCode source file; the proposal is unaccepted.
