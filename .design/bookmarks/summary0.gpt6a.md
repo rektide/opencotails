@@ -98,10 +98,14 @@ already explains.
 
 Inspection baseline: Cotail parent commit
 `5286d380ecc17e75f0f768bef4508de462e49601`; first-party OpenCode checkout
-`/home/rektide/src/opencode-term-v2`, HEAD
-`a0b3feaf002ff53a4d91720e09d5f2f6f2582298`. Links to that checkout below identify
-the actually inspected local source, not a claim that the installed binary or
-the remote branch contains identical code. The archive checkout
+`/home/rektide/src/opencode-term-v2`, initial jj working-copy snapshot
+`ee294775040d68d5acc441b59fa5865721548f50`. Parent review corrected the original
+Git `HEAD` receipt (`a0b3feaf…`): this workspace has a separate `.git` whose
+Beads-initialization commit does not identify the inspected jj source tree.
+The database-selection, Message-schema and plugin-host files were unchanged
+through jj commit `d78bdbf39eee53f2a92247e18efe6ac4d14b1f57`. Links below identify
+local source, not a claim that the installed binary or remote branch contains
+identical code. The archive checkout
 `~/archive/anomalyco/opencode` was located before consulting the published V2
 plugin documentation; it had no root `llms.txt`.
 
