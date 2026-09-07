@@ -2,6 +2,12 @@
 
 ## Current Proposal And Baseline
 
+- [`runtime-probe0.gpt6a.md`](/.design/bookmarks/runtime-probe0.gpt6a.md) - Actual
+  production fixture execution: 12/12 cases pass on Node 26.6.0 and Bun 1.4.1,
+  including a two-Effect-version Promise/JSON boundary. Revises the speculative
+  Node-helper recommendation toward a direct in-process first read tool/RPC;
+  loaded host integration and runtime implementation remain unaccepted.
+
 - [`links-tools0.gpt6a.md`](/.design/bookmarks/links-tools0.gpt6a.md) - New human
   priority: definitive cross-session links as bookmark k=v Target values, plus
   P1 callable read operations and exact bookmark/link tools sharing public read
