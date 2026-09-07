@@ -6,6 +6,7 @@ resource: /.design/bookmarks/callable-read0.gpt6a.md
 tags: [cotail, tools, rpc, session, read-only, implementation]
 status: draft
 generated: { by: "model:openai/gpt-6-astra#xhigh", at: 2026-09-07T02:42:37Z }
+verified: { by: "parent + GX reviews (zai glm-5.3 GX spec/standards)", at: 2026-09-07T02:58:28Z }
 stale_after: 2026-10-07
 sources:
   - { resource: /.design/bookmarks/runtime-probe0.gpt6a.md, title: Accepted in-process boundary evidence }
@@ -21,9 +22,11 @@ sources:
 The parent authorized `cotail-tools-read` after reviewing
 [runtime-probe0](/.design/bookmarks/runtime-probe0.gpt6a.md). One shared async read,
 `cotail_session_get`, and `CotailRead.sessionGet` are implemented and callable in
-fixtures. **Nothing was installed into the live service.** Parent independent
-Standards/Spec review remains pending; bookmark writes, links, consumer UI,
-global namespace work, and next-response binding remain outside this slice.
+fixtures. **Nothing was installed into the live service.** Parent architectural
+review and independent GX Standards/Spec reviews accept this implemented read
+slice (Standards: 0 hard breaches, no actionable code repair; Spec: 0 blocking
+findings); bookmark writes, links, consumer UI, global namespace work, and
+next-response binding remain outside this slice.
 
 ## Exact Interface And Files
 
@@ -155,10 +158,25 @@ separately prove source closure when interrupted after acquisition.
 The real-host harness/results remain **ignored scratch**, not a portable CI host
 fixture. No HTTP/TUI round-trip, installed service, live data, or distributed
 source-binding guarantee was tested. The package remains private/unpublished.
-The next gate is parent code review, then explicit consumer source/server
-binding—not automatically adding writes, a helper process, or consumer UI.
+Parent and GX reviews are complete and accept the slice (see the review
+addendum); the next gate is explicit consumer source/server binding—not
+automatically adding writes, a helper process, or consumer UI.
 
 [links-tools0](/.design/bookmarks/links-tools0.gpt6a.md) retains the broader
 capability split; [runtime-probe0](/.design/bookmarks/runtime-probe0.gpt6a.md)
 supplies its in-process prerequisite evidence. This report records the first
 authorized executable slice without treating every adjacent design as accepted.
+
+## Review Addendum: Parent And GX Acceptance
+
+2026-09-07: the parent read the code, tests, and receipts, plus both GX
+reports, and accepts the implemented read slice. GX Standards review: 0 hard
+standards breaches, no actionable code repair. GX Spec review: 0 blocking
+findings; the only guidance was the stale `cotail-tools-read` description
+(still saying "awaiting parent authorization" with old proposed file paths),
+now corrected in the ticket with the old state preserved in its notes. This
+addendum and the inline status corrections above are docs-only; no verified
+code, test, receipt, or harness bytes changed. Commit d7f851b1 preserves the
+pre-correction report. The ticket intentionally remains open for parent
+closure after this fix receipt and the next explicit consumer source/server
+binding gate.
