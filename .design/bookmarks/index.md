@@ -2,10 +2,11 @@
 
 ## Current Proposal And Baseline
 
-- [`implementation0.gpt6a.md`](/.design/bookmarks/implementation0.gpt6a.md) - Parent
-  reading order and checkpoint brief for the next exact-bookmark/link capability
-  after GX read-only review fixes. Maps the live P1 tickets, superseded guidance,
-  durable-source gap and fixture acceptance; not authorization of the whole epic.
+- [`implementation0.gpt6a.md`](/.design/bookmarks/implementation0.gpt6a.md) -
+  **Pre-audit candidate**, gated on a fresh GX dredge of the last seven days of
+  bookmark history and existing local guidance. Maps proposed execution order,
+  live P1 tickets and fixture acceptance, but must not supersede recovered
+  decisions or authorize a bookmark/Astra handoff before that audit is reviewed.
 
 - [`callable-read0.gpt6a.md`](/.design/bookmarks/callable-read0.gpt6a.md) - First
   authorized runtime slice: shared bounded Session read plus public tool/RPC.

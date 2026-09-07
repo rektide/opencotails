@@ -1,7 +1,7 @@
 ---
 type: ImplementationBrief
 title: Exact bookmarks and links — next callable capability
-description: Parent-reviewed guidance for the next bookmark implementation, after GX finishes any read-only fixes.
+description: Pre-audit proposed reading order, gated on a fresh GX recovery of existing bookmark guidance before any implementation handoff.
 resource: /.design/bookmarks/implementation0.gpt6a.md
 tags: [bookmarks, links, tools, implementation, source-identity]
 status: draft
@@ -18,6 +18,16 @@ sources:
 ---
 
 # Commission and gate
+
+**New human gate:** a fresh GX must dredge Cotail's last seven days of bookmark
+history plus existing local guidance, including this conversation's trail.
+That audit is running in `ses_f86308e82ffeWe0qHb6pgb1IVp`, tracked by
+`cotail-bookmarks-guidance-audit` (blocking the source-catalog prerequisite).
+The parent must review
+its findings before any bookmark implementation or Astra handoff. This brief was
+saved as the **pre-audit candidate** in `6e66a5ce`; it must not outrank recovered
+decisions merely because it is newer. The separate read-only GX cleanup may
+finish, but does not release this bookmark gate.
 
 The human identifies **bookmarks as the next major tool win**. The first read-only
 tool/RPC is implemented; GX owns any review fixes. Do not begin dependent bookmark
