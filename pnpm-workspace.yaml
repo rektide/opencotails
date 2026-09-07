@@ -3,6 +3,15 @@ packages:
 
 allowBuilds:
   msgpackr-extract: false
+  protobufjs: false
+
+minimumReleaseAgeExclude:
+  - '@opencode-ai/ai@0.0.0-dev-19216'
+  - '@opencode-ai/client@0.0.0-dev-19216'
+  - '@opencode-ai/plugin@0.0.0-dev-19216'
+  - '@opencode-ai/protocol@0.0.0-dev-19216'
+  - '@opencode-ai/schema@0.0.0-dev-19216'
+  - '@opencode-ai/util@0.0.0-dev-19216'
 
 overrides:
   opencoattails: 'link:'

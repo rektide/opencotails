@@ -1,0 +1,24 @@
+{
+  "name": "@opencoattails/opencode-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rpc": "./src/rpc.ts"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "0.0.0-dev-19216",
+    "@opencode-ai/schema": "0.0.0-dev-19216",
+    "effect": "4.0.0-rc.112",
+    "opencoattails": "workspace:*",
+    "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@types/json-schema": "7.0.15"
+  }
+}
